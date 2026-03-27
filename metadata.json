@@ -1,0 +1,5 @@
+{
+  "name": "FitFlow AI",
+  "description": "以手機為優先的個人健身助理，使用 Gemini AI 建立客製化菜單、追蹤進度並回答健身問題。",
+  "requestFramePermissions": []
+}

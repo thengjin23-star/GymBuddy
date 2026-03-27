@@ -1,0 +1,60 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User's fitness profile and settings",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "age": { "type": "number" },
+        "weight": { "type": "number" },
+        "height": { "type": "number" },
+        "goal": { "type": "string", "enum": ["muscle", "weight_loss", "endurance", "flexibility"] },
+        "experience": { "type": "string", "enum": ["beginner", "intermediate", "advanced"] },
+        "equipment": { "type": "array", "items": { "type": "string" } },
+        "weeklyPlan": { "type": "object" }
+      },
+      "required": ["name", "age", "weight", "height", "goal", "experience", "equipment"]
+    },
+    "WorkoutSession": {
+      "title": "WorkoutSession",
+      "description": "A completed workout session",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "exercises": { "type": "array", "items": { "type": "object" } },
+        "durationMinutes": { "type": "number" },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "date", "exercises", "durationMinutes"]
+    },
+    "ProgressEntry": {
+      "title": "ProgressEntry",
+      "description": "A progress tracking entry with weight and optional photo/analysis",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "weight": { "type": "number" },
+        "photoBase64": { "type": "string" },
+        "aiAnalysis": { "type": "string" }
+      },
+      "required": ["id", "date", "weight"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profile data"
+    },
+    "/users/{userId}/workouts/{workoutId}": {
+      "schema": { "$ref": "#/entities/WorkoutSession" },
+      "description": "User's workout history"
+    },
+    "/users/{userId}/progress/{progressId}": {
+      "schema": { "$ref": "#/entities/ProgressEntry" },
+      "description": "User's progress tracking history"
+    }
+  }
+}

@@ -1,0 +1,151 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - name: string (required)
+    //   - age: number (required)
+    //   - weight: number (required)
+    //   - height: number (required)
+    //   - goal: string (required, enum: muscle, weight_loss, endurance, flexibility)
+    //   - experience: string (required, enum: beginner, intermediate, advanced)
+    //   - equipment: list of strings (required)
+    //   - weeklyPlan: map (optional)
+    //
+    // Collection: users/{userId}/workouts
+    // Document ID: {workoutId}
+    // Fields:
+    //   - id: string (required)
+    //   - date: string (required)
+    //   - exercises: list of maps (required)
+    //   - durationMinutes: number (required)
+    //   - notes: string (optional)
+    //
+    // Collection: users/{userId}/progress
+    // Document ID: {progressId}
+    // Fields:
+    //   - id: string (required)
+    //   - date: string (required)
+    //   - weight: number (required)
+    //   - photoBase64: string (optional)
+    //   - aiAnalysis: string (optional)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+    
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+    
+    function isValidString(field, minLen, maxLen) {
+      return request.resource.data[field] is string &&
+        request.resource.data[field].size() >= minLen &&
+        request.resource.data[field].size() <= maxLen;
+    }
+    
+    function isValidOptionalString(field, minLen, maxLen) {
+      return !(field in request.resource.data) ||
+             (request.resource.data[field] is string &&
+              request.resource.data[field].size() >= minLen &&
+              request.resource.data[field].size() <= maxLen);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUserProfile() {
+      let allowedFields = ['name', 'age', 'weight', 'height', 'goal', 'experience', 'equipment', 'weeklyPlan'];
+      let hasRequired = hasRequiredFields(['name', 'age', 'weight', 'height', 'goal', 'experience', 'equipment']);
+      let hasOnlyAllowed = hasOnlyAllowedFields(allowedFields);
+      
+      let validName = isValidString('name', 1, 100);
+      let validAge = request.resource.data.age is number && request.resource.data.age > 0 && request.resource.data.age < 150;
+      let validWeight = request.resource.data.weight is number && request.resource.data.weight > 0 && request.resource.data.weight < 500;
+      let validHeight = request.resource.data.height is number && request.resource.data.height > 0 && request.resource.data.height < 300;
+      
+      let validGoal = request.resource.data.goal in ['muscle', 'weight_loss', 'endurance', 'flexibility'];
+      let validExperience = request.resource.data.experience in ['beginner', 'intermediate', 'advanced'];
+      let validEquipment = request.resource.data.equipment is list && request.resource.data.equipment.size() <= 50;
+      
+      let validWeeklyPlan = !('weeklyPlan' in request.resource.data) || request.resource.data.weeklyPlan is map;
+
+      return hasRequired && hasOnlyAllowed && validName && validAge && validWeight && validHeight && validGoal && validExperience && validEquipment && validWeeklyPlan;
+    }
+
+    function isValidWorkoutSession() {
+      let allowedFields = ['id', 'date', 'exercises', 'durationMinutes', 'notes'];
+      let hasRequired = hasRequiredFields(['id', 'date', 'exercises', 'durationMinutes']);
+      let hasOnlyAllowed = hasOnlyAllowedFields(allowedFields);
+      
+      let validId = isValidString('id', 1, 100);
+      let validDate = isValidString('date', 1, 50);
+      let validExercises = request.resource.data.exercises is list && request.resource.data.exercises.size() <= 100;
+      let validDuration = request.resource.data.durationMinutes is number && request.resource.data.durationMinutes >= 0 && request.resource.data.durationMinutes <= 1440;
+      let validNotes = isValidOptionalString('notes', 0, 5000);
+
+      return hasRequired && hasOnlyAllowed && validId && validDate && validExercises && validDuration && validNotes;
+    }
+
+    function isValidProgressEntry() {
+      let allowedFields = ['id', 'date', 'weight', 'photoBase64', 'aiAnalysis'];
+      let hasRequired = hasRequiredFields(['id', 'date', 'weight']);
+      let hasOnlyAllowed = hasOnlyAllowedFields(allowedFields);
+      
+      let validId = isValidString('id', 1, 100);
+      let validDate = isValidString('date', 1, 50);
+      let validWeight = request.resource.data.weight is number && request.resource.data.weight > 0 && request.resource.data.weight < 500;
+      // photoBase64 can be large, but let's limit it to ~2MB (2000000 chars) to prevent abuse
+      let validPhoto = isValidOptionalString('photoBase64', 0, 2000000);
+      let validAnalysis = isValidOptionalString('aiAnalysis', 0, 10000);
+
+      return hasRequired && hasOnlyAllowed && validId && validDate && validWeight && validPhoto && validAnalysis;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUserProfile();
+      allow update: if isOwner(userId) && isValidUserProfile();
+      allow delete: if isOwner(userId);
+
+      match /workouts/{workoutId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidWorkoutSession();
+        allow update: if isOwner(userId) && isValidWorkoutSession();
+        allow delete: if isOwner(userId);
+      }
+
+      match /progress/{progressId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidProgressEntry();
+        allow update: if isOwner(userId) && isValidProgressEntry();
+        allow delete: if isOwner(userId);
+      }
+    }
+  }
+}

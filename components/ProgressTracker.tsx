@@ -92,9 +92,10 @@ const ProgressTracker: React.FC<ProgressTrackerProps> = ({ profile, history, onS
       id: Date.now().toString(),
       date: new Date().toISOString(),
       weight,
-      photoBase64: photo || undefined,
-      aiAnalysis: analysis || undefined
     };
+    
+    if (photo) newEntry.photoBase64 = photo;
+    if (analysis) newEntry.aiAnalysis = analysis;
 
     onSaveEntry(newEntry);
     setIsAdding(false);

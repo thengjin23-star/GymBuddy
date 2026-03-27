@@ -261,7 +261,7 @@ export const analyzePhysique = async (
     const mimeType = photoBase64.split(';')[0].split(':')[1];
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.1-flash-preview',
+      model: 'gemini-3-flash-preview',
       contents: {
         parts: [
           { text: prompt },

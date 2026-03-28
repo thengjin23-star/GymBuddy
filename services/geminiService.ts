@@ -17,6 +17,7 @@ const TRAINER_SYSTEM_INSTRUCTION = `
 3. 語氣要像一位專業、充滿鼓勵性的健身教練 (Personal Trainer)。
 4. 根據使用者的身體數據和器材提供科學的建議。
 5. 當使用者明確要求「菜單」、「課表」、「安排訓練」時，請務必呼叫 createWorkoutRoutine 函數來產生結構化的菜單，不要只用純文字回覆。
+6. 當使用者主動回報他們「已經完成」了某項運動或訓練（例如：「我今天打了 60 分鐘籃球」、「我剛跑完步 30 分鐘」），請務必呼叫 logWorkoutActivity 函數來幫他們記錄運動，並給予鼓勵的回覆。
 `;
 
 /**
@@ -183,7 +184,7 @@ export const sendChatMessage = async (
   profile: UserProfile,
   workoutHistory: WorkoutSession[] = [],
   progressHistory: ProgressEntry[] = []
-): Promise<{ text: string; plan?: WorkoutPlan }> => {
+): Promise<{ text: string; plan?: WorkoutPlan; loggedWorkout?: { activity: string, durationMinutes: number } }> => {
   // Convert app history to Gemini history format
   const historyContext = history.slice(-10).map(msg => ({
     role: msg.role,
@@ -227,12 +228,25 @@ export const sendChatMessage = async (
     }
   };
 
+  const logWorkoutActivityFunction: FunctionDeclaration = {
+    name: "logWorkoutActivity",
+    description: "當使用者回報他們已經完成某項運動（例如打籃球、跑步、游泳、重訓等）時，呼叫此函數來記錄該筆運動。",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        activity: { type: Type.STRING, description: "運動項目名稱 (例如：籃球、跑步、游泳)" },
+        durationMinutes: { type: Type.INTEGER, description: "運動持續時間 (分鐘)" }
+      },
+      required: ["activity", "durationMinutes"]
+    }
+  };
+
   try {
     const chat = ai.chats.create({
       model: MODEL_CHAT,
       config: {
         systemInstruction: TRAINER_SYSTEM_INSTRUCTION,
-        tools: [{ functionDeclarations: [createWorkoutRoutineFunction] }],
+        tools: [{ functionDeclarations: [createWorkoutRoutineFunction, logWorkoutActivityFunction] }],
       },
       history: historyContext
     });
@@ -240,10 +254,15 @@ export const sendChatMessage = async (
     const result = await chat.sendMessage({ message: contextPrompt });
     
     if (result.functionCalls && result.functionCalls.length > 0) {
-      const call = result.functionCalls[0];
-      if (call.name === "createWorkoutRoutine") {
-        const plan = call.args as unknown as WorkoutPlan;
-        return { text: result.text || "這是我為你專屬設計的菜單，看看適不適合！", plan };
+      for (const call of result.functionCalls) {
+        if (call.name === "createWorkoutRoutine") {
+          const plan = call.args as unknown as WorkoutPlan;
+          return { text: result.text || "這是我為你專屬設計的菜單，看看適不適合！", plan };
+        }
+        if (call.name === "logWorkoutActivity") {
+          const loggedWorkout = call.args as unknown as { activity: string, durationMinutes: number };
+          return { text: result.text || `太棒了！我已經幫你把 ${loggedWorkout.durationMinutes} 分鐘的${loggedWorkout.activity}記錄下來囉！繼續保持！`, loggedWorkout };
+        }
       }
     }
 

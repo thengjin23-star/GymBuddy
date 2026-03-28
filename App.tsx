@@ -223,6 +223,7 @@ const App: React.FC = () => {
                   progressHistory={progressHistory}
                   onUpdateProfile={handleSaveProfile} 
                   onStartWorkout={startActiveWorkout}
+                  onLogWorkout={handleSaveWorkout}
                 />
               </motion.div>
             )}

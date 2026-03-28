@@ -10,9 +10,10 @@ interface AITrainerProps {
   progressHistory: ProgressEntry[];
   onUpdateProfile: (p: UserProfile) => void;
   onStartWorkout: (routine: Exercise[], name: string) => void;
+  onLogWorkout?: (session: WorkoutSession) => void;
 }
 
-const AITrainer: React.FC<AITrainerProps> = ({ profile, workoutHistory, progressHistory, onUpdateProfile, onStartWorkout }) => {
+const AITrainer: React.FC<AITrainerProps> = ({ profile, workoutHistory, progressHistory, onUpdateProfile, onStartWorkout, onLogWorkout }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',
@@ -49,6 +50,22 @@ const AITrainer: React.FC<AITrainerProps> = ({ profile, workoutHistory, progress
     if (mode === 'chat') {
       const response = await sendChatMessage(messages, inputText, profile, workoutHistory, progressHistory);
       
+      if (response.loggedWorkout && onLogWorkout) {
+        const newSession: WorkoutSession = {
+          id: Date.now().toString(),
+          date: new Date().toISOString(),
+          durationMinutes: response.loggedWorkout.durationMinutes,
+          exercises: [{
+            name: response.loggedWorkout.activity,
+            sets: 1,
+            reps: `${response.loggedWorkout.durationMinutes} 分鐘`,
+            instruction: '自主訓練'
+          }],
+          notes: '透過 AI 教練記錄'
+        };
+        onLogWorkout(newSession);
+      }
+
       if (response.plan) {
          const newMsgs: ChatMessage[] = [];
          if (response.text && response.text.trim()) {

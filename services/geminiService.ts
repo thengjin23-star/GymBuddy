@@ -185,11 +185,27 @@ export const sendChatMessage = async (
   workoutHistory: WorkoutSession[] = [],
   progressHistory: ProgressEntry[] = []
 ): Promise<{ text: string; plan?: WorkoutPlan; loggedWorkout?: { activity: string, durationMinutes: number } }> => {
-  // Convert app history to Gemini history format
-  const historyContext = history.slice(-10).map(msg => ({
-    role: msg.role,
-    parts: [{ text: msg.text }]
-  }));
+  // Convert app history to Gemini history format, ensuring alternating roles and starting with 'user'
+  const validHistory: any[] = [];
+  let lastRole = null;
+  // Iterate backwards to keep the most recent alternating messages
+  for (let i = history.length - 1; i >= 0; i--) {
+    const msg = history[i];
+    if (msg.role !== lastRole && msg.text) {
+      validHistory.unshift({
+        role: msg.role,
+        parts: [{ text: msg.text }]
+      });
+      lastRole = msg.role;
+    }
+  }
+  
+  // Gemini history MUST start with a 'user' message
+  while (validHistory.length > 0 && validHistory[0].role === 'model') {
+    validHistory.shift();
+  }
+
+  const historyContext = validHistory.slice(-10);
 
   const recentWorkouts = workoutHistory.slice(0, 3).map(w => `${w.date.split('T')[0]}: ${w.durationMinutes}分鐘`).join(', ');
   const recentProgress = progressHistory.slice(0, 1).map(p => `${p.weight}kg`).join(', ');

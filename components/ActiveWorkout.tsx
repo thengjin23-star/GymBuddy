@@ -29,21 +29,6 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({ routine, planName, onFini
     return () => clearInterval(interval);
   }, []);
 
-  // Rest Timer
-  useEffect(() => {
-    let interval: number;
-    if (isResting && restTimer > 0) {
-      interval = window.setInterval(() => {
-        setRestTimer(prev => prev - 1);
-      }, 1000);
-    } else if (restTimer === 0 && isResting) {
-      setIsResting(false);
-      // Play a beep sound or vibrate here in a real app
-      if (navigator.vibrate) navigator.vibrate(200);
-    }
-    return () => clearInterval(interval);
-  }, [isResting, restTimer]);
-
   const currentExercise = routine[currentExerciseIndex];
   const isLastExercise = currentExerciseIndex === routine.length - 1;
 
@@ -56,15 +41,37 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({ routine, planName, onFini
     return match ? parseInt(match[0]) : 0;
   };
 
+  const playBeep = (frequency = 440, duration = 0.1, type = 'sine') => {
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      oscillator.type = type as OscillatorType;
+      oscillator.frequency.setValueAtTime(frequency, audioCtx.currentTime);
+      gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      oscillator.start();
+      oscillator.stop(audioCtx.currentTime + duration);
+    } catch (e) {
+      console.error("Audio playback failed", e);
+    }
+  };
+
   // Active Set Timer Logic
   useEffect(() => {
     let interval: number;
     if (isActiveSetRunning && activeSetTimer > 0) {
+      if (activeSetTimer <= 3) {
+        playBeep(600, 0.1); // Countdown beep
+      }
       interval = window.setInterval(() => {
         setActiveSetTimer(prev => prev - 1);
       }, 1000);
     } else if (activeSetTimer === 0 && isActiveSetRunning) {
       setIsActiveSetRunning(false);
+      playBeep(800, 0.4); // Go beep
       if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
       handleSetComplete();
     }
@@ -76,12 +83,16 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({ routine, planName, onFini
     if (time > 0) {
       setActiveSetTimer(time);
       setIsActiveSetRunning(true);
+      playBeep(800, 0.2); // Start beep
     } else {
       handleSetComplete();
     }
   };
 
   const handleSetComplete = () => {
+    if (!isActiveSetRunning) {
+       playBeep(523.25, 0.1); // Success chime
+    }
     const newCompletedSets = [...completedSets];
     newCompletedSets[currentExerciseIndex] += 1;
     setCompletedSets(newCompletedSets);
@@ -93,6 +104,25 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({ routine, planName, onFini
         setIsResting(true);
     }
   };
+
+  // Rest Timer
+  useEffect(() => {
+    let interval: number;
+    if (isResting && restTimer > 0) {
+      if (restTimer <= 3) {
+        playBeep(600, 0.1); // Countdown beep
+      }
+      interval = window.setInterval(() => {
+        setRestTimer(prev => prev - 1);
+      }, 1000);
+    } else if (restTimer === 0 && isResting) {
+      setIsResting(false);
+      playBeep(523.25, 0.1); 
+      setTimeout(() => playBeep(659.25, 0.4), 100); // Success chime
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+    }
+    return () => clearInterval(interval);
+  }, [isResting, restTimer]);
 
   const handleNextExercise = () => {
     if (!isLastExercise) {
@@ -201,6 +231,15 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({ routine, planName, onFini
                             >
                               <div className="bg-zinc-800/40 p-5 rounded-b-2xl -mt-2 pt-6 text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap border border-t-0 border-white/5 shadow-inner">
                                   {currentExercise.instruction}
+                                  <a 
+                                    href={`https://www.youtube.com/results?search_query=${encodeURIComponent(currentExercise.name + ' 教學')}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="mt-4 flex items-center gap-2 text-primary hover:text-lime-400 transition-colors font-bold bg-primary/10 w-fit px-4 py-2 rounded-xl border border-primary/20"
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 1.4-1.4 49.56 49.56 0 0 1 16.2 0A2 2 0 0 1 21.5 7a24.12 24.12 0 0 1 0 10 2 2 0 0 1-1.4 1.4 49.55 49.55 0 0 1-16.2 0A2 2 0 0 1 2.5 17"/><path d="m10 15 5-3-5-3z"/></svg>
+                                    在 YouTube 觀看動作示範
+                                  </a>
                               </div>
                             </motion.div>
                         )}

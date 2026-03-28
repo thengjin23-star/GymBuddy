@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { UserProfile, ProgressEntry } from '../types';
 import { analyzePhysique } from '../services/geminiService';
+import ReactMarkdown from 'react-markdown';
 
 interface ProgressTrackerProps {
   profile: UserProfile;
@@ -294,11 +295,8 @@ const ProgressTracker: React.FC<ProgressTrackerProps> = ({ profile, history, onS
                       </div>
                       <h4 className="font-display font-bold text-primary">AI 體態分析</h4>
                     </div>
-                    <div className="prose prose-invert prose-sm max-w-none prose-p:leading-relaxed prose-a:text-primary">
-                      {/* Simple markdown rendering for line breaks */}
-                      {selectedEntry.aiAnalysis.split('\n').map((line, i) => (
-                        <p key={i} className="mb-2">{line}</p>
-                      ))}
+                    <div className="prose prose-invert prose-sm max-w-none prose-p:leading-relaxed prose-a:text-primary markdown-body">
+                      <ReactMarkdown>{selectedEntry.aiAnalysis}</ReactMarkdown>
                     </div>
                   </div>
                 )}

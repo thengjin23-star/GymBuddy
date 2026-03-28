@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { UserProfile, ChatMessage, WorkoutPlan, WeeklyPlan, WorkoutSession, ProgressEntry } from '../types';
 import { sendChatMessage, generateWorkoutPlan, generateWeeklyPlan } from '../services/geminiService';
 import { motion, AnimatePresence } from 'motion/react';
+import ReactMarkdown from 'react-markdown';
 
 interface AITrainerProps {
   profile: UserProfile;
@@ -207,13 +208,13 @@ const AITrainer: React.FC<AITrainerProps> = ({ profile, workoutHistory, progress
                 renderPlanCard(msg.text)
               ) : (
                 <div
-                  className={`max-w-[85%] p-4 rounded-3xl text-sm leading-relaxed whitespace-pre-wrap shadow-md ${
+                  className={`max-w-[85%] p-4 rounded-3xl text-sm leading-relaxed shadow-md ${
                     msg.role === 'user'
-                      ? 'bg-primary text-zinc-950 rounded-br-sm font-medium'
-                      : 'bg-surface/80 text-zinc-100 rounded-bl-sm border border-white/5 backdrop-blur-md'
+                      ? 'bg-primary text-zinc-950 rounded-br-sm font-medium whitespace-pre-wrap'
+                      : 'bg-surface/80 text-zinc-100 rounded-bl-sm border border-white/5 backdrop-blur-md markdown-body'
                   }`}
                 >
-                  {msg.text}
+                  {msg.role === 'user' ? msg.text : <ReactMarkdown>{msg.text}</ReactMarkdown>}
                 </div>
               )}
             </motion.div>

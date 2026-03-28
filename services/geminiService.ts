@@ -24,7 +24,9 @@ const TRAINER_SYSTEM_INSTRUCTION = `
  */
 export const generateWorkoutPlan = async (
   profile: UserProfile, 
-  focus: string
+  focus: string,
+  workoutHistory: WorkoutSession[] = [],
+  progressHistory: ProgressEntry[] = []
 ): Promise<WorkoutPlan | null> => {
   
   const schema: Schema = {
@@ -50,11 +52,16 @@ export const generateWorkoutPlan = async (
     required: ["name", "description", "routine"]
   };
 
+  const recentWorkouts = workoutHistory.slice(0, 3).map(w => `${w.date.split('T')[0]}: ${w.durationMinutes}分鐘`).join(', ');
+  const recentProgress = progressHistory.slice(0, 1).map(p => `${p.weight}kg`).join(', ');
+
   const prompt = `
     請為使用者建立一份健身菜單，使用者數據如下：
     - 目標: ${profile.goal}
     - 程度: ${profile.experience}
     - 可用器材: ${profile.equipment.join(', ')}
+    - 近期訓練: ${recentWorkouts || '無'}
+    - 最新體重: ${recentProgress || profile.weight + 'kg'}
     
     使用者本次想訓練的重點是: "${focus}"。
     
@@ -87,7 +94,11 @@ export const generateWorkoutPlan = async (
 /**
  * Generates a full weekly plan
  */
-export const generateWeeklyPlan = async (profile: UserProfile): Promise<WeeklyPlan | null> => {
+export const generateWeeklyPlan = async (
+  profile: UserProfile,
+  workoutHistory: WorkoutSession[] = [],
+  progressHistory: ProgressEntry[] = []
+): Promise<WeeklyPlan | null> => {
   const schema: Schema = {
     type: Type.OBJECT,
     properties: {
@@ -123,12 +134,17 @@ export const generateWeeklyPlan = async (profile: UserProfile): Promise<WeeklyPl
     required: ["schedule"]
   };
 
+  const recentWorkouts = workoutHistory.slice(0, 3).map(w => `${w.date.split('T')[0]}: ${w.durationMinutes}分鐘`).join(', ');
+  const recentProgress = progressHistory.slice(0, 1).map(p => `${p.weight}kg`).join(', ');
+
   const prompt = `
     設計一個為期一週的完整訓練計畫 (Weekly Split)。
     使用者數據:
     - 目標: ${profile.goal}
     - 程度: ${profile.experience}
     - 器材: ${profile.equipment.join(', ')}
+    - 近期訓練: ${recentWorkouts || '無'}
+    - 最新體重: ${recentProgress || profile.weight + 'kg'}
 
     要求：
     1. 必須包含 Monday 到 Sunday 共7天。
@@ -164,7 +180,9 @@ export const generateWeeklyPlan = async (profile: UserProfile): Promise<WeeklyPl
 export const sendChatMessage = async (
   history: ChatMessage[],
   newMessage: string,
-  profile: UserProfile
+  profile: UserProfile,
+  workoutHistory: WorkoutSession[] = [],
+  progressHistory: ProgressEntry[] = []
 ): Promise<{ text: string; plan?: WorkoutPlan }> => {
   // Convert app history to Gemini history format
   const historyContext = history.slice(-10).map(msg => ({
@@ -172,8 +190,13 @@ export const sendChatMessage = async (
     parts: [{ text: msg.text }]
   }));
 
+  const recentWorkouts = workoutHistory.slice(0, 3).map(w => `${w.date.split('T')[0]}: ${w.durationMinutes}分鐘`).join(', ');
+  const recentProgress = progressHistory.slice(0, 1).map(p => `${p.weight}kg`).join(', ');
+
   const contextPrompt = `
     [背景資訊: 身高 ${profile.height}cm, 體重 ${profile.weight}kg, 年齡 ${profile.age}, 目標: ${profile.goal}, 器材: ${profile.equipment.join(', ')}]
+    [近期訓練: ${recentWorkouts || '無'}]
+    [最新體重: ${recentProgress || profile.weight + 'kg'}]
     使用者問題: ${newMessage}
   `;
 

@@ -1,15 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { UserProfile, ChatMessage, WorkoutPlan, WeeklyPlan } from '../types';
+import { UserProfile, ChatMessage, WorkoutPlan, WeeklyPlan, WorkoutSession, ProgressEntry } from '../types';
 import { sendChatMessage, generateWorkoutPlan, generateWeeklyPlan } from '../services/geminiService';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface AITrainerProps {
   profile: UserProfile;
+  workoutHistory: WorkoutSession[];
+  progressHistory: ProgressEntry[];
   onUpdateProfile: (p: UserProfile) => void;
   onStartWorkout: (routine: Exercise[], name: string) => void;
 }
 
-const AITrainer: React.FC<AITrainerProps> = ({ profile, onUpdateProfile, onStartWorkout }) => {
+const AITrainer: React.FC<AITrainerProps> = ({ profile, workoutHistory, progressHistory, onUpdateProfile, onStartWorkout }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',
@@ -44,7 +46,7 @@ const AITrainer: React.FC<AITrainerProps> = ({ profile, onUpdateProfile, onStart
     setIsLoading(true);
 
     if (mode === 'chat') {
-      const response = await sendChatMessage(messages, inputText, profile);
+      const response = await sendChatMessage(messages, inputText, profile, workoutHistory, progressHistory);
       
       if (response.plan) {
          const newMsgs: ChatMessage[] = [];
@@ -74,7 +76,7 @@ const AITrainer: React.FC<AITrainerProps> = ({ profile, onUpdateProfile, onStart
          setMessages((prev) => [...prev, aiMsg]);
       }
     } else if (mode === 'plan') {
-      const plan = await generateWorkoutPlan(profile, inputText);
+      const plan = await generateWorkoutPlan(profile, inputText, workoutHistory, progressHistory);
       const aiMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'model',
@@ -85,7 +87,7 @@ const AITrainer: React.FC<AITrainerProps> = ({ profile, onUpdateProfile, onStart
       setMessages((prev) => [...prev, aiMsg]);
       setMode('chat'); 
     } else if (mode === 'weekly') {
-      const weeklyPlan = await generateWeeklyPlan(profile);
+      const weeklyPlan = await generateWeeklyPlan(profile, workoutHistory, progressHistory);
       if (weeklyPlan) {
         // Save to profile
         const newProfile = { ...profile, weeklyPlan };

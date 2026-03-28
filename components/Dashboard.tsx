@@ -6,6 +6,7 @@ interface DashboardProps {
   profile: UserProfile;
   history: WorkoutSession[];
   onStartWorkout: (routine: Exercise[], name: string) => void;
+  onUpdateProfile: (profile: UserProfile) => void;
 }
 
 const goalMap: Record<string, string> = {
@@ -19,12 +20,20 @@ const dayMap: Record<string, string> = {
   'Monday': '週一', 'Tuesday': '週二', 'Wednesday': '週三', 'Thursday': '週四', 'Friday': '週五', 'Saturday': '週六', 'Sunday': '週日'
 };
 
-const Dashboard: React.FC<DashboardProps> = ({ profile, history, onStartWorkout }) => {
+const Dashboard: React.FC<DashboardProps> = ({ profile, history, onStartWorkout, onUpdateProfile }) => {
   // Get today's day name (e.g., "Monday")
   const todayName = new Date().toLocaleDateString('en-US', { weekday: 'long' });
   
   // Find today's plan from the weekly profile
   const todaysPlan = profile.weeklyPlan?.schedule.find(d => d.day === todayName);
+
+  const handleDeleteWeeklyPlan = () => {
+    if (confirm('確定要刪除目前的週課表嗎？')) {
+      const updatedProfile = { ...profile };
+      delete updatedProfile.weeklyPlan;
+      onUpdateProfile(updatedProfile);
+    }
+  };
 
   // Process history for chart (Group by date)
   const last7Days = Array.from({ length: 7 }).map((_, i) => {
@@ -105,7 +114,15 @@ const Dashboard: React.FC<DashboardProps> = ({ profile, history, onStartWorkout 
       {/* Weekly Schedule Preview */}
       {profile.weeklyPlan && (
         <div className="mt-2">
-           <h3 className="text-white font-display font-semibold mb-4 text-lg">本週課表</h3>
+           <div className="flex justify-between items-center mb-4">
+             <h3 className="text-white font-display font-semibold text-lg">本週課表</h3>
+             <button 
+               onClick={handleDeleteWeeklyPlan}
+               className="text-xs text-red-400 hover:text-red-300 bg-red-500/10 px-3 py-1.5 rounded-full border border-red-500/20 transition-colors"
+             >
+               刪除課表
+             </button>
+           </div>
            <div className="flex gap-3 overflow-x-auto no-scrollbar pb-4 -mx-4 px-4">
              {profile.weeklyPlan.schedule.map((day, idx) => {
                const isToday = day.day === todayName;

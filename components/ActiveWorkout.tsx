@@ -12,12 +12,14 @@ interface ActiveWorkoutProps {
 const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({ routine, planName, onFinish, onCancel }) => {
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
   const [completedSets, setCompletedSets] = useState<number[]>(routine.map(() => 0)); // Track completed sets per exercise
-  const [timer, setTimer] = useState(0);
-  const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [workoutDuration, setWorkoutDuration] = useState(0); // Total workout time in seconds
   const [restTimer, setRestTimer] = useState(0);
   const [isResting, setIsResting] = useState(false);
   const [showInstruction, setShowInstruction] = useState(false);
+
+  // Active Set Timer
+  const [activeSetTimer, setActiveSetTimer] = useState(0);
+  const [isActiveSetRunning, setIsActiveSetRunning] = useState(false);
 
   // Global Workout Timer
   useEffect(() => {
@@ -45,10 +47,45 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({ routine, planName, onFini
   const currentExercise = routine[currentExerciseIndex];
   const isLastExercise = currentExerciseIndex === routine.length - 1;
 
+  const isTimeBased = (reps: string) => {
+    return reps.includes('秒') || reps.toLowerCase().includes('s');
+  };
+
+  const parseTime = (reps: string) => {
+    const match = reps.match(/\d+/);
+    return match ? parseInt(match[0]) : 0;
+  };
+
+  // Active Set Timer Logic
+  useEffect(() => {
+    let interval: number;
+    if (isActiveSetRunning && activeSetTimer > 0) {
+      interval = window.setInterval(() => {
+        setActiveSetTimer(prev => prev - 1);
+      }, 1000);
+    } else if (activeSetTimer === 0 && isActiveSetRunning) {
+      setIsActiveSetRunning(false);
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+      handleSetComplete();
+    }
+    return () => clearInterval(interval);
+  }, [isActiveSetRunning, activeSetTimer]);
+
+  const startActiveSet = () => {
+    const time = parseTime(currentExercise.reps);
+    if (time > 0) {
+      setActiveSetTimer(time);
+      setIsActiveSetRunning(true);
+    } else {
+      handleSetComplete();
+    }
+  };
+
   const handleSetComplete = () => {
     const newCompletedSets = [...completedSets];
     newCompletedSets[currentExerciseIndex] += 1;
     setCompletedSets(newCompletedSets);
+    setIsActiveSetRunning(false);
 
     // Start Rest Timer (default 60s)
     if (newCompletedSets[currentExerciseIndex] < currentExercise.sets) {
@@ -62,6 +99,7 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({ routine, planName, onFini
       setCurrentExerciseIndex(prev => prev + 1);
       setIsResting(false);
       setShowInstruction(false);
+      setIsActiveSetRunning(false);
     } else {
       finishWorkout();
     }
@@ -212,13 +250,33 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({ routine, planName, onFini
       {/* Bottom Controls */}
       <div className="p-4 bg-surface/80 backdrop-blur-md border-t border-white/5 pb-safe safe-area-inset-bottom">
          {completedSets[currentExerciseIndex] < currentExercise.sets ? (
-             <button 
-                onClick={handleSetComplete}
-                className="w-full bg-white text-zinc-950 font-bold text-lg py-4 rounded-2xl hover:bg-zinc-200 transition-all active:scale-[0.98] flex items-center justify-center gap-2 shadow-xl"
-             >
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                完成第 {completedSets[currentExerciseIndex] + 1} 組
-             </button>
+             isTimeBased(currentExercise.reps) ? (
+                 isActiveSetRunning ? (
+                     <button 
+                        onClick={handleSetComplete}
+                        className="w-full bg-red-500/20 text-red-400 border border-red-500/50 font-bold text-lg py-4 rounded-2xl hover:bg-red-500/30 transition-all active:scale-[0.98] flex items-center justify-center gap-2 shadow-xl"
+                     >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                        跳過計時 ({activeSetTimer}s)
+                     </button>
+                 ) : (
+                     <button 
+                        onClick={startActiveSet}
+                        className="w-full bg-primary text-zinc-950 font-bold text-lg py-4 rounded-2xl hover:bg-lime-400 transition-all active:scale-[0.98] flex items-center justify-center gap-2 shadow-xl shadow-primary/20"
+                     >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        開始第 {completedSets[currentExerciseIndex] + 1} 組計時
+                     </button>
+                 )
+             ) : (
+                 <button 
+                    onClick={handleSetComplete}
+                    className="w-full bg-white text-zinc-950 font-bold text-lg py-4 rounded-2xl hover:bg-zinc-200 transition-all active:scale-[0.98] flex items-center justify-center gap-2 shadow-xl"
+                 >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    完成第 {completedSets[currentExerciseIndex] + 1} 組
+                 </button>
+             )
          ) : (
              <button 
                 onClick={handleNextExercise}

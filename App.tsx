@@ -203,6 +203,7 @@ const App: React.FC = () => {
                     profile={userProfile} 
                     history={workoutHistory} 
                     onStartWorkout={startActiveWorkout}
+                    onUpdateProfile={handleSaveProfile}
                 />
               </motion.div>
             )}
@@ -218,6 +219,8 @@ const App: React.FC = () => {
               >
                 <AITrainer 
                   profile={userProfile} 
+                  workoutHistory={workoutHistory}
+                  progressHistory={progressHistory}
                   onUpdateProfile={handleSaveProfile} 
                   onStartWorkout={startActiveWorkout}
                 />
@@ -232,7 +235,7 @@ const App: React.FC = () => {
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
               >
-                <WorkoutLog onSave={handleSaveWorkout} />
+                <WorkoutLog onSave={handleSaveWorkout} history={workoutHistory} />
               </motion.div>
             )}
 

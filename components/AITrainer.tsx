@@ -162,7 +162,8 @@ const AITrainer: React.FC<AITrainerProps> = ({ profile, workoutHistory, progress
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    localStorage.setItem('fitflow_chat_messages', JSON.stringify(messages));
+    const messagesToSave = messages.filter(msg => msg.id === 'welcome' || msg.isPlan);
+    localStorage.setItem('fitflow_chat_messages', JSON.stringify(messagesToSave));
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }

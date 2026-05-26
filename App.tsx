@@ -13,7 +13,9 @@ import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, setDoc, collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 
 const App: React.FC = () => {
-  const [currentView, setCurrentView] = useState<AppView>(AppView.DASHBOARD);
+  const [currentView, setCurrentView] = useState<AppView>(() => {
+    return (localStorage.getItem('fitflow_current_view') as AppView) || AppView.DASHBOARD;
+  });
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [workoutHistory, setWorkoutHistory] = useState<WorkoutSession[]>([]);
   const [progressHistory, setProgressHistory] = useState<ProgressEntry[]>([]);
@@ -23,8 +25,30 @@ const App: React.FC = () => {
   const [isAuthReady, setIsAuthReady] = useState(false);
   
   // State for Active Workout
-  const [activeRoutine, setActiveRoutine] = useState<Exercise[] | null>(null);
-  const [activePlanName, setActivePlanName] = useState<string>("");
+  const [activeRoutine, setActiveRoutine] = useState<Exercise[] | null>(() => {
+    const saved = localStorage.getItem('fitflow_active_routine');
+    return saved ? JSON.parse(saved) : null;
+  });
+  const [activePlanName, setActivePlanName] = useState<string>(() => {
+    return localStorage.getItem('fitflow_active_plan_name') || "";
+  });
+
+  // Persist State
+  useEffect(() => {
+    localStorage.setItem('fitflow_current_view', currentView);
+  }, [currentView]);
+
+  useEffect(() => {
+    if (activeRoutine) {
+      localStorage.setItem('fitflow_active_routine', JSON.stringify(activeRoutine));
+    } else {
+      localStorage.removeItem('fitflow_active_routine');
+    }
+  }, [activeRoutine]);
+
+  useEffect(() => {
+    localStorage.setItem('fitflow_active_plan_name', activePlanName);
+  }, [activePlanName]);
 
   // Handle Auth State
   useEffect(() => {

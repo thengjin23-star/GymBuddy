@@ -35,6 +35,8 @@ export const generateWorkoutPlan = async (
     properties: {
       name: { type: Type.STRING, description: "訓練菜單的創意名稱 (例如：強力胸肌轟炸)" },
       description: { type: Type.STRING, description: "簡短描述訓練重點" },
+      advice: { type: Type.STRING, description: "專業建議與注意事項 (中文)" },
+      diet: { type: Type.STRING, description: "針對此訓練目標的飲食建議 (中文)" },
       routine: {
         type: Type.ARRAY,
         items: {
@@ -50,7 +52,7 @@ export const generateWorkoutPlan = async (
         }
       }
     },
-    required: ["name", "description", "routine"]
+    required: ["name", "description", "routine", "advice", "diet"]
   };
 
   const recentWorkouts = workoutHistory.slice(0, 3).map(w => `${w.date.split('T')[0]}: ${w.durationMinutes}分鐘`).join(', ');
@@ -70,6 +72,7 @@ export const generateWorkoutPlan = async (
     1. 動作必須配合使用者擁有的器材。
     2. 內容全部使用繁體中文。
     3. 針對初學者給予較簡單的動作，進階者則給予高強度動作。
+    4. 提供專業的建議(包含注意事項)與搭配的飲食建議。
   `;
 
   try {
@@ -225,6 +228,8 @@ export const sendChatMessage = async (
       properties: {
         name: { type: Type.STRING, description: "訓練菜單的創意名稱 (例如：強力胸肌轟炸)" },
         description: { type: Type.STRING, description: "簡短描述訓練重點" },
+        advice: { type: Type.STRING, description: "專業建議與注意事項 (中文)" },
+        diet: { type: Type.STRING, description: "針對此訓練目標的飲食建議 (中文)" },
         routine: {
           type: Type.ARRAY,
           items: {
@@ -240,7 +245,7 @@ export const sendChatMessage = async (
           }
         }
       },
-      required: ["name", "description", "routine"]
+      required: ["name", "description", "routine", "advice", "diet"]
     }
   };
 

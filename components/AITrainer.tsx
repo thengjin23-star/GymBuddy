@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { UserProfile, ChatMessage, WorkoutPlan, WeeklyPlan, WorkoutSession, ProgressEntry } from '../types';
+import { UserProfile, ChatMessage, WorkoutPlan, WeeklyPlan, WorkoutSession, ProgressEntry, Exercise } from '../types';
 import { sendChatMessage, generateWorkoutPlan, generateWeeklyPlan } from '../services/geminiService';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
@@ -13,25 +13,164 @@ interface AITrainerProps {
   onLogWorkout?: (session: WorkoutSession) => void;
 }
 
+const PlanCard: React.FC<{ 
+  msgId: string; 
+  initialJson: string; 
+  onUpdate: (id: string, newJson: string) => void; 
+  onStart: (routine: Exercise[], name: string) => void;
+}> = ({ msgId, initialJson, onUpdate, onStart }) => {
+  const [plan, setPlan] = useState<WorkoutPlan | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState<WorkoutPlan | null>(null);
+
+  useEffect(() => {
+    try {
+      setPlan(JSON.parse(initialJson));
+    } catch (e) {
+      console.error("Failed to parse plan", e);
+    }
+  }, [initialJson]);
+
+  if (!plan) {
+    return <div className="text-red-400 bg-red-500/10 p-4 rounded-2xl border border-red-500/20">無法顯示菜單格式。</div>;
+  }
+
+  const handleEditChange = (index: number, field: keyof Exercise, value: string | number) => {
+    if (!editForm) return;
+    const newRoutine = [...editForm.routine];
+    newRoutine[index] = { ...newRoutine[index], [field]: value };
+    setEditForm({ ...editForm, routine: newRoutine });
+  };
+
+  const saveEdit = () => {
+    if (editForm) {
+      setPlan(editForm);
+      onUpdate(msgId, JSON.stringify(editForm));
+      setIsEditing(false);
+    }
+  };
+
+  return (
+    <div className="bg-surface/80 rounded-3xl p-5 my-2 border border-white/10 w-full shadow-xl backdrop-blur-md">
+      <div className="flex justify-between items-start mb-3">
+         <h3 className="text-xl font-display font-bold text-white my-1">{plan.name}</h3>
+         <div className="flex gap-2 items-center">
+            <span className="text-[10px] uppercase tracking-wider font-bold bg-primary/20 text-primary px-2.5 py-1 rounded-full border border-primary/20">單次菜單</span>
+            {!isEditing ? (
+              <button onClick={() => { setEditForm(JSON.parse(JSON.stringify(plan))); setIsEditing(true); }} className="text-zinc-400 hover:text-white p-1">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+              </button>
+            ) : null}
+         </div>
+      </div>
+      <p className="text-sm text-zinc-400 mb-5 leading-relaxed">{plan.description}</p>
+      
+      <div className="space-y-3 mb-6">
+        {(isEditing ? editForm?.routine : plan.routine)?.map((ex, i) => (
+          <div key={i} className="flex flex-col gap-2 bg-black/20 p-3.5 rounded-2xl border border-white/5">
+            <div className="flex justify-between items-center text-left">
+              <div>
+                <p className="font-medium text-white">{ex.name}</p>
+              </div>
+              {!isEditing && (
+                <div className="text-right bg-surface px-3 py-1.5 rounded-xl border border-white/5 flex-shrink-0">
+                  <p className="text-sm font-bold text-primary">{ex.sets} <span className="text-zinc-500 text-xs font-normal">組</span> x {ex.reps}</p>
+                </div>
+              )}
+            </div>
+            
+            {isEditing ? (
+              <div className="flex gap-2 mt-2 items-center text-sm">
+                <div className="flex bg-surface rounded-xl border border-white/10 overflow-hidden items-center text-center max-w-[100px]">
+                  <input type="number" value={ex.sets} onChange={(e) => handleEditChange(i, 'sets', parseInt(e.target.value) || 0)} className="bg-transparent w-full p-2 outline-none text-white font-medium text-center" />
+                  <span className="text-zinc-500 text-xs font-normal pr-2">組</span>
+                </div>
+                <span className="text-zinc-500 font-bold">x</span>
+                <input type="text" value={ex.reps} onChange={(e) => handleEditChange(i, 'reps', e.target.value)} className="flex-1 bg-surface rounded-xl border border-white/10 p-2 text-white font-medium outline-none placeholder:text-zinc-600" placeholder="次數或秒數..." />
+              </div>
+            ) : (
+              ex.notes && <p className="text-xs text-zinc-500 text-left">{ex.notes}</p>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {isEditing && (
+        <div className="flex gap-2 mb-6">
+          <button onClick={() => setIsEditing(false)} className="flex-1 bg-zinc-800 text-white font-medium py-3 rounded-xl border border-white/10 text-sm">取消</button>
+          <button onClick={saveEdit} className="flex-1 bg-primary text-zinc-950 font-bold py-3 rounded-xl text-sm">儲存修改</button>
+        </div>
+      )}
+
+      {!isEditing && (
+        <>
+          {(plan.advice || plan.diet) && (
+             <div className="mb-6 space-y-4 text-left">
+               {plan.advice && (
+                 <div className="bg-orange-500/10 border border-orange-500/20 p-4 rounded-2xl">
+                   <h4 className="text-orange-400 font-bold text-xs mb-2 flex items-center gap-1.5 uppercase tracking-wider">
+                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                     教練叮嚀
+                   </h4>
+                   <p className="text-[13px] text-zinc-300 leading-relaxed">{plan.advice}</p>
+                 </div>
+               )}
+               {plan.diet && (
+                 <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-2xl">
+                   <h4 className="text-emerald-400 font-bold text-xs mb-2 flex items-center gap-1.5 uppercase tracking-wider">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                     飲食建議
+                   </h4>
+                   <p className="text-[13px] text-zinc-300 leading-relaxed">{plan.diet}</p>
+                 </div>
+               )}
+             </div>
+          )}
+          <button 
+            onClick={() => onStart(plan.routine, plan.name)}
+            className="w-full bg-primary text-zinc-950 font-bold py-4 rounded-2xl hover:bg-lime-400 transition-all active:scale-[0.98] flex items-center justify-center gap-2 shadow-lg shadow-primary/20"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            開始訓練
+          </button>
+        </>
+      )}
+    </div>
+  );
+};
+
 const AITrainer: React.FC<AITrainerProps> = ({ profile, workoutHistory, progressHistory, onUpdateProfile, onStartWorkout, onLogWorkout }) => {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    const saved = localStorage.getItem('fitflow_chat_messages');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error("Failed to parse saved messages", e);
+      }
+    }
+    return [{
       id: 'welcome',
       role: 'model',
       text: `嗨 ${profile.name}！我是你的專屬 AI 教練 FitFlow。根據你的資料（${profile.weight}kg, ${profile.height}cm），你的目標是「${profile.goal === 'muscle' ? '增肌' : profile.goal === 'weight_loss' ? '減脂' : profile.goal === 'endurance' ? '耐力' : '柔軟度'}」。\n\n你可以直接告訴我你想練什麼部位，我會幫你安排菜單，或者點擊下方按鈕讓我為你規劃一週課表！`,
       timestamp: Date.now(),
-    },
-  ]);
+    }];
+  });
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [mode, setMode] = useState<'chat' | 'plan' | 'weekly'>('chat');
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    localStorage.setItem('fitflow_chat_messages', JSON.stringify(messages));
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  const handleUpdateMessage = (id: string, newText: string) => {
+    setMessages(prev => prev.map(msg => msg.id === id ? { ...msg, text: newText } : msg));
+  };
 
   const handleSend = async () => {
     if ((!inputText.trim() && mode !== 'weekly') || isLoading) return;
@@ -133,43 +272,6 @@ const AITrainer: React.FC<AITrainerProps> = ({ profile, workoutHistory, progress
     setIsLoading(false);
   };
 
-  const renderPlanCard = (jsonString: string) => {
-    try {
-      const plan: WorkoutPlan = JSON.parse(jsonString);
-      return (
-        <div className="bg-surface/80 rounded-3xl p-5 my-2 border border-white/10 w-full shadow-xl backdrop-blur-md">
-          <div className="flex justify-between items-start mb-3">
-             <h3 className="text-xl font-display font-bold text-white">{plan.name}</h3>
-             <span className="text-[10px] uppercase tracking-wider font-bold bg-primary/20 text-primary px-2.5 py-1 rounded-full border border-primary/20">單次菜單</span>
-          </div>
-          <p className="text-sm text-zinc-400 mb-5 leading-relaxed">{plan.description}</p>
-          <div className="space-y-3 mb-6">
-            {plan.routine.map((ex, i) => (
-              <div key={i} className="flex justify-between items-center bg-black/20 p-3.5 rounded-2xl border border-white/5">
-                <div>
-                  <p className="font-medium text-white">{ex.name}</p>
-                  {ex.notes && <p className="text-xs text-zinc-500 mt-1">{ex.notes}</p>}
-                </div>
-                <div className="text-right bg-surface px-3 py-1.5 rounded-xl border border-white/5">
-                  <p className="text-sm font-bold text-primary">{ex.sets} <span className="text-zinc-500 text-xs font-normal">組</span> x {ex.reps}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-          <button 
-             onClick={() => onStartWorkout(plan.routine, plan.name)}
-             className="w-full bg-primary text-zinc-950 font-bold py-4 rounded-2xl hover:bg-lime-400 transition-all active:scale-[0.98] flex items-center justify-center gap-2 shadow-lg shadow-primary/20"
-           >
-             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-             開始訓練
-           </button>
-        </div>
-      );
-    } catch (e) {
-      return <div className="text-red-400 bg-red-500/10 p-4 rounded-2xl border border-red-500/20">無法顯示菜單格式。</div>;
-    }
-  };
-
   return (
     <div className="flex flex-col h-[calc(100vh-100px)]">
       {/* Mode Switcher */}
@@ -222,7 +324,7 @@ const AITrainer: React.FC<AITrainerProps> = ({ profile, workoutHistory, progress
               )}
               
               {msg.isPlan ? (
-                renderPlanCard(msg.text)
+                <PlanCard msgId={msg.id} initialJson={msg.text} onUpdate={handleUpdateMessage} onStart={onStartWorkout} />
               ) : (
                 <div
                   className={`max-w-[85%] p-4 rounded-3xl text-sm leading-relaxed shadow-md ${

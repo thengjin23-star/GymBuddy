@@ -46,6 +46,8 @@ export interface WorkoutPlan {
   name: string;
   description: string;
   routine: Exercise[];
+  advice?: string; // Professional caveats/suggestions
+  diet?: string; // Dietary recommendations
 }
 
 // Chat

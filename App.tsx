@@ -112,14 +112,17 @@ const App: React.FC = () => {
   };
 
   // Save workout to Firestore
-  const handleSaveWorkout = async (session: WorkoutSession) => {
+  // fromActiveWorkout: 只有從「訓練模式」完成時才需要跳轉回首頁；
+  // 從「紀錄」頁或 AI 聊天記錄運動時，留在原頁面即可
+  const handleSaveWorkout = async (session: WorkoutSession, options?: { fromActiveWorkout?: boolean }) => {
     if (!user) return;
     try {
       await setDoc(doc(db, 'users', user.uid, 'workouts', session.id), session);
-      // Exit active mode
-      setActiveRoutine(null);
-      setCurrentView(AppView.DASHBOARD);
-      alert("🎉 訓練已成功記錄！你可以在首頁看到你的進度。");
+      if (options?.fromActiveWorkout) {
+        setActiveRoutine(null);
+        setCurrentView(AppView.DASHBOARD);
+        alert("🎉 訓練已成功記錄！你可以在首頁看到你的進度。");
+      }
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}/workouts/${session.id}`);
     }
@@ -150,6 +153,13 @@ const App: React.FC = () => {
   const handleReset = async () => {
       if(confirm("確定要登出嗎？")) {
         await logout();
+        // 清除本機暫存，避免下一位登入者看到上一位的聊天與訓練狀態
+        localStorage.removeItem('fitflow_chat_messages');
+        localStorage.removeItem('fitflow_active_routine');
+        localStorage.removeItem('fitflow_active_plan_name');
+        setActiveRoutine(null);
+        setActivePlanName("");
+        setCurrentView(AppView.DASHBOARD);
       }
   };
 
@@ -201,10 +211,10 @@ const App: React.FC = () => {
   // Render Full Screen Active Workout if active
   if (currentView === AppView.ACTIVE_WORKOUT && activeRoutine) {
       return (
-          <ActiveWorkout 
-            routine={activeRoutine} 
-            planName={activePlanName} 
-            onFinish={handleSaveWorkout}
+          <ActiveWorkout
+            routine={activeRoutine}
+            planName={activePlanName}
+            onFinish={(session) => handleSaveWorkout(session, { fromActiveWorkout: true })}
             onCancel={() => setCurrentView(AppView.DASHBOARD)}
           />
       );

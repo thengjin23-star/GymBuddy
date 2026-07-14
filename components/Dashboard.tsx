@@ -190,7 +190,7 @@ const Dashboard: React.FC<DashboardProps> = ({ profile, history, onStartWorkout,
                    }`}
                  >
                    <p className={`text-xs font-medium ${isToday ? 'text-primary' : 'text-zinc-400'}`}>
-                     {dayMap[day.day].replace('週', '')}
+                     {(dayMap[day.day] || day.day).replace('週', '')}
                    </p>
                    <p className="text-white font-display font-bold text-sm text-center line-clamp-1">
                      {day.isRest ? '休息' : day.focus}
@@ -224,7 +224,7 @@ const Dashboard: React.FC<DashboardProps> = ({ profile, history, onStartWorkout,
             >
               <div className="p-5 flex justify-between items-center border-b border-white/5 bg-surface z-10">
                 <div>
-                  <h3 className="font-display font-bold text-xl">{dayMap[selectedDayPlan.day]}</h3>
+                  <h3 className="font-display font-bold text-xl">{dayMap[selectedDayPlan.day] || selectedDayPlan.day}</h3>
                   <p className="text-primary font-medium text-sm">{selectedDayPlan.isRest ? '休息日' : selectedDayPlan.focus}</p>
                 </div>
                 <button onClick={() => setSelectedDayPlan(null)} className="bg-background/50 p-2 rounded-full text-zinc-400 hover:text-white">
@@ -240,7 +240,7 @@ const Dashboard: React.FC<DashboardProps> = ({ profile, history, onStartWorkout,
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {selectedDayPlan.routine.map((ex, i) => (
+                    {(selectedDayPlan.routine || []).map((ex, i) => (
                       <div key={i} className="flex justify-between items-center bg-black/20 p-4 rounded-2xl border border-white/5">
                         <div>
                           <p className="font-medium text-white">{ex.name}</p>
@@ -255,11 +255,11 @@ const Dashboard: React.FC<DashboardProps> = ({ profile, history, onStartWorkout,
                 )}
               </div>
 
-              {!selectedDayPlan.isRest && (
+              {!selectedDayPlan.isRest && selectedDayPlan.routine && selectedDayPlan.routine.length > 0 && (
                 <div className="p-5 border-t border-white/5 bg-surface/80 backdrop-blur-md">
-                  <button 
+                  <button
                     onClick={() => {
-                      onStartWorkout(selectedDayPlan.routine, `${dayMap[selectedDayPlan.day]} - ${selectedDayPlan.focus}`);
+                      onStartWorkout(selectedDayPlan.routine!, `${dayMap[selectedDayPlan.day] || selectedDayPlan.day} - ${selectedDayPlan.focus}`);
                       setSelectedDayPlan(null);
                     }}
                     className="w-full bg-primary text-zinc-950 font-bold py-4 rounded-2xl hover:bg-lime-400 transition-all active:scale-[0.98] flex items-center justify-center gap-2 shadow-lg shadow-primary/20"

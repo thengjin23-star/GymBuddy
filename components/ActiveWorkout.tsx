@@ -161,7 +161,12 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({ routine, planName, onFini
     >
       {/* Top Bar */}
       <div className="p-4 flex justify-between items-center bg-surface/80 backdrop-blur-md border-b border-white/5">
-        <button onClick={onCancel} className="text-zinc-400 text-sm font-medium px-2 py-1">離開</button>
+        <button
+          onClick={() => {
+            if (confirm('確定要離開嗎？目前的訓練進度將不會被儲存。')) onCancel();
+          }}
+          className="text-zinc-400 text-sm font-medium px-2 py-1"
+        >離開</button>
         <div className="font-mono text-xl font-bold text-white tracking-widest">{formatTime(workoutDuration)}</div>
         <button onClick={finishWorkout} className="text-primary font-bold text-sm px-2 py-1">完成</button>
       </div>
@@ -174,7 +179,7 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({ routine, planName, onFini
            <motion.div 
              className="h-full bg-primary" 
              initial={{ width: 0 }}
-             animate={{ width: `${((currentExerciseIndex) / routine.length) * 100}%` }}
+             animate={{ width: `${((currentExerciseIndex + (completedSets[currentExerciseIndex] / Math.max(currentExercise.sets, 1))) / routine.length) * 100}%` }}
              transition={{ duration: 0.5, ease: "easeInOut" }}
            />
         </div>

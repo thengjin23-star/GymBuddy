@@ -56,11 +56,13 @@ const ProgressTracker: React.FC<ProgressTrackerProps> = ({ profile, history, onS
   const [selectedEntry, setSelectedEntry] = useState<ProgressEntry | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Prepare chart data
-  const chartData = history.map(entry => ({
-    date: new Date(entry.date).toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' }),
-    weight: entry.weight
-  })).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  // Prepare chart data (先用原始 ISO 日期排序，格式化後的中文日期無法轉回 Date)
+  const chartData = [...history]
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .map(entry => ({
+      date: new Date(entry.date).toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' }),
+      weight: entry.weight
+    }));
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -146,7 +148,7 @@ const ProgressTracker: React.FC<ProgressTrackerProps> = ({ profile, history, onS
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-4">
-            {history.slice().reverse().map(entry => (
+            {[...history].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(entry => (
               <motion.div 
                 key={entry.id}
                 whileHover={{ scale: 1.02 }}

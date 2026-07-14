@@ -207,7 +207,7 @@ const WorkoutLog: React.FC<WorkoutLogProps> = ({ onSave, history = [] }) => {
                     <input 
                       type="number" 
                       value={duration} 
-                      onChange={(e) => setDuration(parseInt(e.target.value))}
+                      onChange={(e) => setDuration(parseInt(e.target.value) || 0)}
                       className="w-24 bg-zinc-900/80 text-white p-4 rounded-2xl text-center font-mono text-lg border border-white/5 focus:border-primary outline-none transition-colors"
                     />
                     <button

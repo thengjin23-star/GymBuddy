@@ -173,13 +173,15 @@ const AITrainer: React.FC<AITrainerProps> = ({ profile, workoutHistory, progress
     setMessages(prev => prev.map(msg => msg.id === id ? { ...msg, text: newText } : msg));
   };
 
-  const handleSend = async () => {
-    if ((!inputText.trim() && mode !== 'weekly') || isLoading) return;
+  // modeOverride 讓「生成一週課表」按鈕能立即觸發，避免 setState 非同步導致的 stale closure
+  const handleSend = async (modeOverride?: 'chat' | 'plan' | 'weekly') => {
+    const activeMode = modeOverride ?? mode;
+    if ((!inputText.trim() && activeMode !== 'weekly') || isLoading) return;
 
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
       role: 'user',
-      text: mode === 'weekly' ? '請幫我產生一週課表' : inputText,
+      text: activeMode === 'weekly' ? '請幫我產生一週課表' : inputText,
       timestamp: Date.now(),
     };
 
@@ -187,7 +189,7 @@ const AITrainer: React.FC<AITrainerProps> = ({ profile, workoutHistory, progress
     setInputText('');
     setIsLoading(true);
 
-    if (mode === 'chat') {
+    if (activeMode === 'chat') {
       const response = await sendChatMessage(messages, inputText, profile, workoutHistory, progressHistory);
       
       if (response.loggedWorkout && onLogWorkout) {
@@ -233,7 +235,7 @@ const AITrainer: React.FC<AITrainerProps> = ({ profile, workoutHistory, progress
          };
          setMessages((prev) => [...prev, aiMsg]);
       }
-    } else if (mode === 'plan') {
+    } else if (activeMode === 'plan') {
       const plan = await generateWorkoutPlan(profile, inputText, workoutHistory, progressHistory);
       const aiMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
@@ -244,7 +246,7 @@ const AITrainer: React.FC<AITrainerProps> = ({ profile, workoutHistory, progress
       };
       setMessages((prev) => [...prev, aiMsg]);
       setMode('chat'); 
-    } else if (mode === 'weekly') {
+    } else if (activeMode === 'weekly') {
       const weeklyPlan = await generateWeeklyPlan(profile, workoutHistory, progressHistory);
       if (weeklyPlan) {
         // Save to profile
@@ -295,9 +297,9 @@ const AITrainer: React.FC<AITrainerProps> = ({ profile, workoutHistory, progress
         </button>
         <button
           onClick={() => {
+              if (isLoading) return;
               setMode('weekly');
-              // Auto trigger for better UX if clicking this button
-              if(!isLoading) setTimeout(handleSend, 100);
+              handleSend('weekly');
           }}
           className={`whitespace-nowrap px-5 py-2.5 text-sm font-medium rounded-full transition-all border ${
             mode === 'weekly' ? 'bg-primary border-primary text-zinc-950 shadow-lg shadow-primary/20' : 'bg-surface/50 border-white/10 text-zinc-400 backdrop-blur-sm'
@@ -367,12 +369,15 @@ const AITrainer: React.FC<AITrainerProps> = ({ profile, workoutHistory, progress
                 type="text"
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                onKeyDown={(e) => {
+                  // isComposing: 避免注音/拼音輸入法選字按 Enter 時誤送出
+                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) handleSend();
+                }}
                 placeholder={mode === 'chat' ? "問我問題..." : "描述想練的部位 (例如：胸)"}
                 className="w-full bg-surface/80 text-white rounded-full py-4 pl-5 pr-14 border border-white/10 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all placeholder:text-zinc-500 shadow-inner"
             />
             <button
-                onClick={handleSend}
+                onClick={() => handleSend()}
                 disabled={isLoading || !inputText.trim()}
                 className="absolute right-2 p-2.5 bg-primary rounded-full text-zinc-950 hover:bg-lime-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95 shadow-md"
             >

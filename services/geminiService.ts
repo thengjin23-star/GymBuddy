@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type, Schema, FunctionDeclaration } from "@google/genai";
-import { UserProfile, ChatMessage, WorkoutPlan, WeeklyPlan } from "../types";
+import { UserProfile, ChatMessage, WorkoutPlan, WeeklyPlan, WorkoutSession, ProgressEntry } from "../types";
 
 // Initialize Gemini Client
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -194,6 +194,7 @@ export const sendChatMessage = async (
   // Iterate backwards to keep the most recent alternating messages
   for (let i = history.length - 1; i >= 0; i--) {
     const msg = history[i];
+    if (msg.isPlan) continue; // 菜單卡片是 JSON 字串，不適合當作對話歷史
     if (msg.role !== lastRole && msg.text) {
       validHistory.unshift({
         role: msg.role,

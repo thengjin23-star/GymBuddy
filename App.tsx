@@ -23,6 +23,9 @@ const App: React.FC = () => {
   // Auth state
   const [user, setUser] = useState<User | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
+
+  // Profile editing modal
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
   
   // State for Active Workout
   const [activeRoutine, setActiveRoutine] = useState<Exercise[] | null>(() => {
@@ -320,8 +323,8 @@ const App: React.FC = () => {
                             <div className="bg-background/50 p-4 rounded-2xl text-center border border-white/5">
                                 <p className="text-xs text-zinc-400 mb-1">基礎代謝 (BMR)</p>
                                 <p className="text-2xl font-display font-bold text-primary">
-                                    {/* Simple Mifflin-St Jeor approximation without gender */}
-                                    {Math.round(10 * userProfile.weight + 6.25 * userProfile.height - 5 * userProfile.age + 5)} <span className="text-sm text-zinc-500 font-sans">kcal</span>
+                                    {/* Mifflin-St Jeor: male +5 / female -161; older profiles without gender fall back to male */}
+                                    {Math.round(10 * userProfile.weight + 6.25 * userProfile.height - 5 * userProfile.age + (userProfile.gender === 'female' ? -161 : 5))} <span className="text-sm text-zinc-500 font-sans">kcal</span>
                                 </p>
                             </div>
                         </div>
@@ -330,14 +333,24 @@ const App: React.FC = () => {
                             <p className="flex justify-between"><span>身高</span> <span className="text-white font-medium">{userProfile.height} cm</span></p>
                             <p className="flex justify-between"><span>體重</span> <span className="text-white font-medium">{userProfile.weight} kg</span></p>
                             <p className="flex justify-between"><span>年齡</span> <span className="text-white font-medium">{userProfile.age} 歲</span></p>
+                            {userProfile.gender && (
+                              <p className="flex justify-between"><span>生理性別</span> <span className="text-white font-medium">{userProfile.gender === 'male' ? '男' : '女'}</span></p>
+                            )}
                             <div className="pt-2 mt-2 border-t border-white/5">
                                 <p className="mb-1 text-zinc-400">可用器材</p>
                                 <p className="text-white font-medium">{userProfile.equipment.join(', ')}</p>
                             </div>
                         </div>
                     </div>
-                    
-                    <button 
+
+                    <button
+                        onClick={() => setIsEditingProfile(true)}
+                        className="w-full bg-primary/10 border border-primary/30 text-primary py-4 rounded-2xl hover:bg-primary/20 transition-colors font-medium"
+                    >
+                        編輯個人資料
+                    </button>
+
+                    <button
                         onClick={handleReset}
                         className="w-full border border-red-500/30 text-red-400 py-4 rounded-2xl hover:bg-red-500/10 transition-colors font-medium"
                     >
@@ -350,6 +363,14 @@ const App: React.FC = () => {
         </div>
 
         <Navigation currentView={currentView} setView={setCurrentView} />
+
+        {isEditingProfile && (
+          <ProfileModal
+            initialProfile={userProfile}
+            onSave={(p) => { handleSaveProfile(p); setIsEditingProfile(false); }}
+            onClose={() => setIsEditingProfile(false)}
+          />
+        )}
       </main>
     </div>
   );

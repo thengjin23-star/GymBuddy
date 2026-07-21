@@ -1,8 +1,21 @@
 import { GoogleGenAI, Type, Schema, FunctionDeclaration } from "@google/genai";
 import { UserProfile, ChatMessage, WorkoutPlan, WeeklyPlan, WorkoutSession, ProgressEntry } from "../types";
 
-// Initialize Gemini Client
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Lazily initialize the Gemini client: constructing it at module load would
+// throw when the API key is missing and white-screen the whole app
+let aiClient: GoogleGenAI | null = null;
+const getAI = (): GoogleGenAI => {
+  if (!aiClient) {
+    if (!process.env.API_KEY) {
+      throw new Error("MISSING_API_KEY");
+    }
+    aiClient = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  }
+  return aiClient;
+};
+
+const isMissingKeyError = (error: unknown) =>
+  error instanceof Error && error.message === "MISSING_API_KEY";
 
 const MODEL_CHAT = "gemini-3-flash-preview";
 const MODEL_PLAN = "gemini-3-flash-preview";
@@ -76,7 +89,7 @@ export const generateWorkoutPlan = async (
   `;
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await getAI().models.generateContent({
       model: MODEL_PLAN,
       contents: prompt,
       config: {
@@ -158,7 +171,7 @@ export const generateWeeklyPlan = async (
   `;
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await getAI().models.generateContent({
       model: MODEL_PLAN,
       contents: prompt,
       config: {
@@ -264,7 +277,7 @@ export const sendChatMessage = async (
   };
 
   try {
-    const chat = ai.chats.create({
+    const chat = getAI().chats.create({
       model: MODEL_CHAT,
       config: {
         systemInstruction: TRAINER_SYSTEM_INSTRUCTION,
@@ -291,6 +304,9 @@ export const sendChatMessage = async (
     return { text: result.text || "連線不穩，就像力竭一樣，請再試一次？" };
   } catch (error) {
     console.error("Chat error:", error);
+    if (isMissingKeyError(error)) {
+      return { text: "⚠️ 尚未設定 Gemini API Key，AI 功能暫時無法使用。請在專案的 .env.local 設定 GEMINI_API_KEY 後重新啟動。" };
+    }
     return { text: "系統發生錯誤，請檢查網路連線。" };
   }
 };
@@ -324,7 +340,7 @@ export const analyzePhysique = async (
     const base64Data = photoBase64.split(',')[1];
     const mimeType = photoBase64.split(';')[0].split(':')[1];
 
-    const response = await ai.models.generateContent({
+    const response = await getAI().models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: {
         parts: [

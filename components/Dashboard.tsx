@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { UserProfile, WorkoutSession, WeeklyPlan, DayPlan, Exercise } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
+import { useToast } from './Toast';
 
 interface DashboardProps {
   profile: UserProfile;
@@ -22,6 +23,7 @@ const dayMap: Record<string, string> = {
 };
 
 const Dashboard: React.FC<DashboardProps> = ({ profile, history, onStartWorkout, onUpdateProfile }) => {
+  const { confirm, showToast } = useToast();
   const [selectedDayPlan, setSelectedDayPlan] = useState<DayPlan | null>(null);
 
   // Get today's day name (e.g., "Monday")
@@ -30,11 +32,12 @@ const Dashboard: React.FC<DashboardProps> = ({ profile, history, onStartWorkout,
   // Find today's plan from the weekly profile
   const todaysPlan = profile.weeklyPlan?.schedule.find(d => d.day === todayName);
 
-  const handleDeleteWeeklyPlan = () => {
-    if (confirm('確定要刪除目前的週課表嗎？')) {
+  const handleDeleteWeeklyPlan = async () => {
+    if (await confirm('確定要刪除目前的週課表嗎？')) {
       const updatedProfile = { ...profile };
       delete updatedProfile.weeklyPlan;
       onUpdateProfile(updatedProfile);
+      showToast('已刪除週課表', 'info');
     }
   };
 

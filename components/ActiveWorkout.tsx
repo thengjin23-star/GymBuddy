@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Exercise, WorkoutSession } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
+import { useToast } from './Toast';
 
 interface ActiveWorkoutProps {
   routine: Exercise[];
@@ -10,8 +11,11 @@ interface ActiveWorkoutProps {
 }
 
 const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({ routine, planName, onFinish, onCancel }) => {
+  const { confirm } = useToast();
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
   const [completedSets, setCompletedSets] = useState<number[]>(routine.map(() => 0)); // Track completed sets per exercise
+  // Actual weight used per exercise (progressive-overload tracking), seeded from plan defaults
+  const [weights, setWeights] = useState<number[]>(routine.map((e) => e.weight || 0));
   const [workoutDuration, setWorkoutDuration] = useState(0); // Total workout time in seconds
   const [restTimer, setRestTimer] = useState(0);
   const [isResting, setIsResting] = useState(false);
@@ -136,14 +140,33 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({ routine, planName, onFini
   };
 
   const finishWorkout = () => {
+    // Record what was actually performed: real completed-set counts and the
+    // weight the user actually used, not just the plan's default values
+    const anyCompleted = completedSets.some((c) => c > 0);
+    const performedExercises: Exercise[] = routine
+      .map((ex, i) => ({
+        ...ex,
+        sets: completedSets[i] > 0 ? completedSets[i] : ex.sets,
+        weight: weights[i] || ex.weight || 0,
+      }))
+      .filter((_, i) => !anyCompleted || completedSets[i] > 0);
+
     const session: WorkoutSession = {
       id: Date.now().toString(),
       date: new Date().toISOString(),
-      exercises: routine, // In a complex app, we'd track actual weights used
-      durationMinutes: Math.ceil(workoutDuration / 60),
+      exercises: performedExercises,
+      durationMinutes: Math.max(1, Math.ceil(workoutDuration / 60)),
       notes: `Completed plan: ${planName}`
     };
     onFinish(session);
+  };
+
+  const adjustWeight = (delta: number) => {
+    setWeights((prev) => {
+      const next = [...prev];
+      next[currentExerciseIndex] = Math.max(0, Math.round((next[currentExerciseIndex] + delta) * 10) / 10);
+      return next;
+    });
   };
 
   const formatTime = (seconds: number) => {
@@ -162,8 +185,8 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({ routine, planName, onFini
       {/* Top Bar */}
       <div className="p-4 flex justify-between items-center bg-surface/80 backdrop-blur-md border-b border-white/5">
         <button
-          onClick={() => {
-            if (confirm('確定要離開嗎？目前的訓練進度將不會被儲存。')) onCancel();
+          onClick={async () => {
+            if (await confirm('確定要離開嗎？目前的訓練進度將不會被儲存。')) onCancel();
           }}
           className="text-zinc-400 text-sm font-medium px-2 py-1"
         >離開</button>
@@ -251,6 +274,27 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({ routine, planName, onFini
                       </AnimatePresence>
                   </div>
               )}
+
+              {/* Weight adjuster — record the actual load used this session */}
+              <div className="mb-8 w-full max-w-xs mx-auto">
+                <p className="text-zinc-400 text-xs uppercase tracking-wider font-semibold mb-2">本次使用重量</p>
+                <div className="flex items-center justify-center gap-4">
+                  <button
+                    onClick={() => adjustWeight(-2.5)}
+                    className="w-12 h-12 rounded-2xl bg-surface/80 border border-white/10 text-white text-2xl font-bold flex items-center justify-center hover:bg-zinc-700 active:scale-95 transition-all"
+                    aria-label="減少重量"
+                  >−</button>
+                  <div className="flex items-baseline gap-1.5 min-w-[110px] justify-center">
+                    <span className="text-4xl font-display font-bold text-white tabular-nums">{weights[currentExerciseIndex]}</span>
+                    <span className="text-zinc-500 text-sm font-medium">kg</span>
+                  </div>
+                  <button
+                    onClick={() => adjustWeight(2.5)}
+                    className="w-12 h-12 rounded-2xl bg-surface/80 border border-white/10 text-white text-2xl font-bold flex items-center justify-center hover:bg-zinc-700 active:scale-95 transition-all"
+                    aria-label="增加重量"
+                  >+</button>
+                </div>
+              </div>
 
               {/* Sets Tracker */}
               <div className="flex justify-center gap-3 mb-8">

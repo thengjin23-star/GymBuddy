@@ -4,6 +4,7 @@ export interface UserProfile {
   age: number;
   weight: number; // kg
   height: number; // cm
+  gender?: 'male' | 'female'; // optional: older profiles don't have it
   goal: 'muscle' | 'weight_loss' | 'endurance' | 'flexibility';
   experience: 'beginner' | 'intermediate' | 'advanced';
   equipment: string[]; // e.g., 'dumbbell', 'bodyweight', 'gym'

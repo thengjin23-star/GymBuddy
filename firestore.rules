@@ -13,6 +13,7 @@ service cloud.firestore {
     //   - age: number (required)
     //   - weight: number (required)
     //   - height: number (required)
+    //   - gender: string (optional, enum: male, female)
     //   - goal: string (required, enum: muscle, weight_loss, endurance, flexibility)
     //   - experience: string (required, enum: beginner, intermediate, advanced)
     //   - equipment: list of strings (required)
@@ -76,7 +77,7 @@ service cloud.firestore {
     // ===============================================================
 
     function isValidUserProfile() {
-      let allowedFields = ['name', 'age', 'weight', 'height', 'goal', 'experience', 'equipment', 'weeklyPlan'];
+      let allowedFields = ['name', 'age', 'weight', 'height', 'gender', 'goal', 'experience', 'equipment', 'weeklyPlan'];
       let hasRequired = hasRequiredFields(['name', 'age', 'weight', 'height', 'goal', 'experience', 'equipment']);
       let hasOnlyAllowed = hasOnlyAllowedFields(allowedFields);
       
@@ -90,8 +91,9 @@ service cloud.firestore {
       let validEquipment = request.resource.data.equipment is list && request.resource.data.equipment.size() <= 50;
       
       let validWeeklyPlan = !('weeklyPlan' in request.resource.data) || request.resource.data.weeklyPlan is map;
+      let validGender = !('gender' in request.resource.data) || request.resource.data.gender in ['male', 'female'];
 
-      return hasRequired && hasOnlyAllowed && validName && validAge && validWeight && validHeight && validGoal && validExperience && validEquipment && validWeeklyPlan;
+      return hasRequired && hasOnlyAllowed && validName && validAge && validWeight && validHeight && validGoal && validExperience && validEquipment && validWeeklyPlan && validGender;
     }
 
     function isValidWorkoutSession() {

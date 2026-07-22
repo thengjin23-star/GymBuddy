@@ -4,11 +4,13 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { UserProfile, ProgressEntry } from '../types';
 import { analyzePhysique } from '../services/geminiService';
 import ReactMarkdown from 'react-markdown';
+import { useToast } from './Toast';
 
 interface ProgressTrackerProps {
   profile: UserProfile;
   history: ProgressEntry[];
   onSaveEntry: (entry: ProgressEntry) => void;
+  onDelete?: (id: string) => void;
 }
 
 const compressImage = (file: File): Promise<string> => {
@@ -48,7 +50,8 @@ const compressImage = (file: File): Promise<string> => {
   });
 };
 
-const ProgressTracker: React.FC<ProgressTrackerProps> = ({ profile, history, onSaveEntry }) => {
+const ProgressTracker: React.FC<ProgressTrackerProps> = ({ profile, history, onSaveEntry, onDelete }) => {
+  const { showToast } = useToast();
   const [isAdding, setIsAdding] = useState(false);
   const [weight, setWeight] = useState<number>(profile.weight);
   const [photo, setPhoto] = useState<string | null>(null);
@@ -72,7 +75,7 @@ const ProgressTracker: React.FC<ProgressTrackerProps> = ({ profile, history, onS
       setPhoto(compressedBase64);
     } catch (error) {
       console.error("Error compressing image:", error);
-      alert("圖片處理失敗，請換一張試試。");
+      showToast("圖片處理失敗，請換一張試試。", 'error');
     }
   };
 
@@ -87,7 +90,7 @@ const ProgressTracker: React.FC<ProgressTrackerProps> = ({ profile, history, onS
         analysis = await analyzePhysique(photo, profile, weight);
       } catch (error) {
         console.error("Analysis failed", error);
-        alert("AI 分析失敗，但仍會儲存您的紀錄。");
+        showToast("AI 分析失敗，但仍會儲存您的紀錄。", 'error');
       }
     }
 
@@ -277,9 +280,20 @@ const ProgressTracker: React.FC<ProgressTrackerProps> = ({ profile, history, onS
                   <h3 className="font-display font-bold text-lg">{new Date(selectedEntry.date).toLocaleDateString('zh-TW')}</h3>
                   <p className="text-primary font-medium text-sm">{selectedEntry.weight} kg</p>
                 </div>
-                <button onClick={() => setSelectedEntry(null)} className="bg-background/50 p-2 rounded-full text-zinc-400 hover:text-white">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-                </button>
+                <div className="flex items-center gap-2">
+                  {onDelete && (
+                    <button
+                      onClick={() => { const id = selectedEntry.id; setSelectedEntry(null); onDelete(id); }}
+                      className="bg-red-400/10 p-2 rounded-full text-red-400/80 hover:text-red-400 transition-colors"
+                      aria-label="刪除紀錄"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                    </button>
+                  )}
+                  <button onClick={() => setSelectedEntry(null)} className="bg-background/50 p-2 rounded-full text-zinc-400 hover:text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                  </button>
+                </div>
               </div>
               
               <div className="overflow-y-auto p-5 space-y-6">

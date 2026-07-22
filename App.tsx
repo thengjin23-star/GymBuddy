@@ -10,9 +10,11 @@ import { AppView, UserProfile, WorkoutSession, Exercise, ProgressEntry } from '.
 import { AnimatePresence, motion } from 'motion/react';
 import { auth, db, signInWithGoogle, logout, handleFirestoreError, OperationType } from './firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, setDoc, collection, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, collection, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { useToast } from './components/Toast';
 
 const App: React.FC = () => {
+  const { showToast, confirm } = useToast();
   const [currentView, setCurrentView] = useState<AppView>(() => {
     return (localStorage.getItem('fitflow_current_view') as AppView) || AppView.DASHBOARD;
   });
@@ -124,10 +126,39 @@ const App: React.FC = () => {
       if (options?.fromActiveWorkout) {
         setActiveRoutine(null);
         setCurrentView(AppView.DASHBOARD);
-        alert("🎉 訓練已成功記錄！你可以在首頁看到你的進度。");
       }
+      showToast("🎉 訓練已成功記錄！", 'success');
     } catch (error) {
+      showToast("儲存失敗，請檢查網路連線。", 'error');
       handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}/workouts/${session.id}`);
+    }
+  };
+
+  // Delete a logged workout
+  const handleDeleteWorkout = async (id: string) => {
+    if (!user) return;
+    const ok = await confirm("確定要刪除這筆訓練紀錄嗎？此動作無法復原。");
+    if (!ok) return;
+    try {
+      await deleteDoc(doc(db, 'users', user.uid, 'workouts', id));
+      showToast("已刪除訓練紀錄", 'info');
+    } catch (error) {
+      showToast("刪除失敗，請稍後再試。", 'error');
+      handleFirestoreError(error, OperationType.DELETE, `users/${user.uid}/workouts/${id}`);
+    }
+  };
+
+  // Delete a progress entry
+  const handleDeleteProgress = async (id: string) => {
+    if (!user) return;
+    const ok = await confirm("確定要刪除這筆體態紀錄嗎？此動作無法復原。");
+    if (!ok) return;
+    try {
+      await deleteDoc(doc(db, 'users', user.uid, 'progress', id));
+      showToast("已刪除體態紀錄", 'info');
+    } catch (error) {
+      showToast("刪除失敗，請稍後再試。", 'error');
+      handleFirestoreError(error, OperationType.DELETE, `users/${user.uid}/progress/${id}`);
     }
   };
 
@@ -154,7 +185,7 @@ const App: React.FC = () => {
   };
 
   const handleReset = async () => {
-      if(confirm("確定要登出嗎？")) {
+      if(await confirm("確定要登出嗎？")) {
         await logout();
         // 清除本機暫存，避免下一位登入者看到上一位的聊天與訓練狀態
         localStorage.removeItem('fitflow_chat_messages');
@@ -273,7 +304,7 @@ const App: React.FC = () => {
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
               >
-                <WorkoutLog onSave={handleSaveWorkout} history={workoutHistory} />
+                <WorkoutLog onSave={handleSaveWorkout} history={workoutHistory} onDelete={handleDeleteWorkout} />
               </motion.div>
             )}
 
@@ -285,10 +316,11 @@ const App: React.FC = () => {
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
               >
-                <ProgressTracker 
-                  profile={userProfile} 
-                  history={progressHistory} 
-                  onSaveEntry={handleSaveProgress} 
+                <ProgressTracker
+                  profile={userProfile}
+                  history={progressHistory}
+                  onSaveEntry={handleSaveProgress}
+                  onDelete={handleDeleteProgress}
                 />
               </motion.div>
             )}
@@ -367,7 +399,7 @@ const App: React.FC = () => {
         {isEditingProfile && (
           <ProfileModal
             initialProfile={userProfile}
-            onSave={(p) => { handleSaveProfile(p); setIsEditingProfile(false); }}
+            onSave={(p) => { handleSaveProfile(p); setIsEditingProfile(false); showToast("個人資料已更新", 'success'); }}
             onClose={() => setIsEditingProfile(false)}
           />
         )}

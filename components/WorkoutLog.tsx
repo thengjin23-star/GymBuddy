@@ -8,9 +8,10 @@ import { zhTW } from 'date-fns/locale';
 interface WorkoutLogProps {
   onSave: (session: WorkoutSession) => void;
   history?: WorkoutSession[];
+  onDelete?: (id: string) => void;
 }
 
-const WorkoutLog: React.FC<WorkoutLogProps> = ({ onSave, history = [] }) => {
+const WorkoutLog: React.FC<WorkoutLogProps> = ({ onSave, history = [], onDelete }) => {
   const [sessionExercises, setSessionExercises] = useState<Exercise[]>([]);
   const [currentExercise, setCurrentExercise] = useState<Partial<Exercise>>({});
   const [duration, setDuration] = useState<number>(45);
@@ -45,7 +46,6 @@ const WorkoutLog: React.FC<WorkoutLogProps> = ({ onSave, history = [] }) => {
     
     onSave(newSession);
     setSessionExercises([]); // Reset
-    alert("🎉 訓練紀錄已儲存！");
     setViewMode('calendar');
   };
 
@@ -298,9 +298,20 @@ const WorkoutLog: React.FC<WorkoutLogProps> = ({ onSave, history = [] }) => {
                       <span className="text-xs font-medium text-primary bg-primary/10 px-2 py-1 rounded-full">
                         {session.durationMinutes} 分鐘
                       </span>
-                      <span className="text-xs text-zinc-500">
-                        {format(parseISO(session.date), 'HH:mm')}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-zinc-500">
+                          {format(parseISO(session.date), 'HH:mm')}
+                        </span>
+                        {onDelete && (
+                          <button
+                            onClick={() => onDelete(session.id)}
+                            className="text-red-400/70 hover:text-red-400 p-1.5 bg-red-400/10 rounded-lg transition-colors"
+                            aria-label="刪除紀錄"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <div className="space-y-2">
                       {session.exercises.map((ex, i) => (

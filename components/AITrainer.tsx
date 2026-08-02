@@ -11,6 +11,11 @@ interface AITrainerProps {
   onUpdateProfile: (p: UserProfile) => void;
   onStartWorkout: (routine: Exercise[], name: string) => void;
   onLogWorkout?: (session: WorkoutSession) => void;
+  /** Persisted conversation, newest last. Empty means "show the welcome card". */
+  messages: ChatMessage[];
+  onSaveMessages: (messages: ChatMessage[]) => void;
+  onUpdateMessage: (id: string, text: string) => void;
+  onClearChat: () => void;
 }
 
 const PlanCard: React.FC<{ 
@@ -139,38 +144,44 @@ const PlanCard: React.FC<{
   );
 };
 
-const AITrainer: React.FC<AITrainerProps> = ({ profile, workoutHistory, progressHistory, onUpdateProfile, onStartWorkout, onLogWorkout }) => {
-  const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    const saved = localStorage.getItem('fitflow_chat_messages');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error("Failed to parse saved messages", e);
-      }
-    }
-    return [{
-      id: 'welcome',
-      role: 'model',
-      text: `嗨 ${profile.name}！我是你的專屬 AI 教練 FitFlow。根據你的資料（${profile.weight}kg, ${profile.height}cm），你的目標是「${profile.goal === 'muscle' ? '增肌' : profile.goal === 'weight_loss' ? '減脂' : profile.goal === 'endurance' ? '耐力' : '柔軟度'}」。\n\n你可以直接告訴我你想練什麼部位，我會幫你安排菜單，或者點擊下方按鈕讓我為你規劃一週課表！`,
-      timestamp: Date.now(),
-    }];
-  });
+const AITrainer: React.FC<AITrainerProps> = ({ profile, workoutHistory, progressHistory, onUpdateProfile, onStartWorkout, onLogWorkout, messages, onSaveMessages, onUpdateMessage, onClearChat }) => {
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [mode, setMode] = useState<'chat' | 'plan' | 'weekly'>('chat');
+  // Messages sent this turn, shown immediately while Firestore round-trips
+  const [pendingMessages, setPendingMessages] = useState<ChatMessage[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const goalLabel = profile.goal === 'muscle' ? '增肌' : profile.goal === 'weight_loss' ? '減脂' : profile.goal === 'endurance' ? '耐力' : '柔軟度';
+  const welcomeMessage: ChatMessage = {
+    id: 'welcome',
+    role: 'model',
+    text: `嗨 ${profile.name}！我是你的專屬 AI 教練 FitFlow。根據你的資料（${profile.weight}kg, ${profile.height}cm），你的目標是「${goalLabel}」。\n\n你可以直接告訴我你想練什麼部位，我會幫你安排菜單，或者點擊下方按鈕讓我為你規劃一週課表！`,
+    timestamp: 0,
+  };
+
+  // Drop optimistic copies once Firestore echoes them back
+  const persistedIds = new Set(messages.map(m => m.id));
+  const visibleMessages = [
+    ...(messages.length === 0 ? [welcomeMessage] : messages),
+    ...pendingMessages.filter(m => !persistedIds.has(m.id)),
+  ];
+
   useEffect(() => {
-    const messagesToSave = messages.filter(msg => msg.id === 'welcome' || msg.isPlan);
-    localStorage.setItem('fitflow_chat_messages', JSON.stringify(messagesToSave));
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    if (pendingMessages.length > 0) {
+      setPendingMessages(prev => prev.filter(m => !persistedIds.has(m.id)));
     }
   }, [messages]);
 
-  const handleUpdateMessage = (id: string, newText: string) => {
-    setMessages(prev => prev.map(msg => msg.id === id ? { ...msg, text: newText } : msg));
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [visibleMessages.length, isLoading]);
+
+  const appendMessages = (msgs: ChatMessage[]) => {
+    setPendingMessages(prev => [...prev, ...msgs]);
+    onSaveMessages(msgs);
   };
 
   // modeOverride 讓「生成一週課表」按鈕能立即觸發，避免 setState 非同步導致的 stale closure
@@ -185,12 +196,12 @@ const AITrainer: React.FC<AITrainerProps> = ({ profile, workoutHistory, progress
       timestamp: Date.now(),
     };
 
-    setMessages((prev) => [...prev, userMsg]);
+    appendMessages([userMsg]);
     setInputText('');
     setIsLoading(true);
 
     if (activeMode === 'chat') {
-      const response = await sendChatMessage(messages, inputText, profile, workoutHistory, progressHistory);
+      const response = await sendChatMessage(visibleMessages, inputText, profile, workoutHistory, progressHistory);
       
       if (response.loggedWorkout && onLogWorkout) {
         const newSession: WorkoutSession = {
@@ -225,7 +236,7 @@ const AITrainer: React.FC<AITrainerProps> = ({ profile, workoutHistory, progress
             isPlan: true,
             timestamp: Date.now() + 1,
          });
-         setMessages((prev) => [...prev, ...newMsgs]);
+         appendMessages(newMsgs);
       } else {
          const aiMsg: ChatMessage = {
             id: (Date.now() + 1).toString(),
@@ -233,7 +244,7 @@ const AITrainer: React.FC<AITrainerProps> = ({ profile, workoutHistory, progress
             text: response.text,
             timestamp: Date.now(),
          };
-         setMessages((prev) => [...prev, aiMsg]);
+         appendMessages([aiMsg]);
       }
     } else if (activeMode === 'plan') {
       const plan = await generateWorkoutPlan(profile, inputText, workoutHistory, progressHistory);
@@ -244,8 +255,8 @@ const AITrainer: React.FC<AITrainerProps> = ({ profile, workoutHistory, progress
         isPlan: !!plan,
         timestamp: Date.now(),
       };
-      setMessages((prev) => [...prev, aiMsg]);
-      setMode('chat'); 
+      appendMessages([aiMsg]);
+      setMode('chat');
     } else if (activeMode === 'weekly') {
       const weeklyPlan = await generateWeeklyPlan(profile, workoutHistory, progressHistory);
       if (weeklyPlan) {
@@ -259,7 +270,7 @@ const AITrainer: React.FC<AITrainerProps> = ({ profile, workoutHistory, progress
           text: "每週課表已生成並儲存到首頁！你可以隨時查看。",
           timestamp: Date.now(),
         };
-        setMessages((prev) => [...prev, aiMsg]);
+        appendMessages([aiMsg]);
       } else {
          const aiMsg: ChatMessage = {
           id: (Date.now() + 1).toString(),
@@ -267,7 +278,7 @@ const AITrainer: React.FC<AITrainerProps> = ({ profile, workoutHistory, progress
           text: "生成週課表失敗，請稍後再試。",
           timestamp: Date.now(),
         };
-        setMessages((prev) => [...prev, aiMsg]);
+        appendMessages([aiMsg]);
       }
       setMode('chat');
     }
@@ -307,12 +318,21 @@ const AITrainer: React.FC<AITrainerProps> = ({ profile, workoutHistory, progress
         >
           🪄 生成一週課表
         </button>
+        {messages.length > 0 && (
+          <button
+            onClick={onClearChat}
+            className="whitespace-nowrap px-4 py-2.5 text-sm font-medium rounded-full transition-all border bg-surface/50 border-white/10 text-zinc-500 hover:text-red-400 hover:border-red-500/30 backdrop-blur-sm"
+            aria-label="清除對話紀錄"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+          </button>
+        )}
       </div>
 
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto px-4 space-y-6 no-scrollbar pb-4 pt-2">
         <AnimatePresence initial={false}>
-          {messages.map((msg) => (
+          {visibleMessages.map((msg) => (
             <motion.div
               key={msg.id}
               initial={{ opacity: 0, y: 10, scale: 0.95 }}
@@ -327,7 +347,7 @@ const AITrainer: React.FC<AITrainerProps> = ({ profile, workoutHistory, progress
               )}
               
               {msg.isPlan ? (
-                <PlanCard msgId={msg.id} initialJson={msg.text} onUpdate={handleUpdateMessage} onStart={onStartWorkout} />
+                <PlanCard msgId={msg.id} initialJson={msg.text} onUpdate={onUpdateMessage} onStart={onStartWorkout} />
               ) : (
                 <div
                   className={`max-w-[85%] p-4 rounded-3xl text-sm leading-relaxed shadow-md ${

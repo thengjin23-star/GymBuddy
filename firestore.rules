@@ -28,6 +28,15 @@ service cloud.firestore {
     //   - durationMinutes: number (required)
     //   - notes: string (optional)
     //
+    // Collection: users/{userId}/chat
+    // Document ID: {messageId}
+    // Fields:
+    //   - id: string (required)
+    //   - role: string (required, enum: user, model)
+    //   - text: string (required)
+    //   - timestamp: number (required)
+    //   - isPlan: bool (optional)
+    //
     // Collection: users/{userId}/progress
     // Document ID: {progressId}
     // Fields:
@@ -118,11 +127,27 @@ service cloud.firestore {
       let validId = isValidString('id', 1, 100);
       let validDate = isValidString('date', 1, 50);
       let validWeight = request.resource.data.weight is number && request.resource.data.weight > 0 && request.resource.data.weight < 500;
-      // photoBase64 can be large, but let's limit it to ~2MB (2000000 chars) to prevent abuse
-      let validPhoto = isValidOptionalString('photoBase64', 0, 2000000);
+      // Firestore caps a document at 1 MiB, so keep the base64 photo well under
+      // it — a larger value would be accepted here but always fail on write
+      let validPhoto = isValidOptionalString('photoBase64', 0, 700000);
       let validAnalysis = isValidOptionalString('aiAnalysis', 0, 10000);
 
       return hasRequired && hasOnlyAllowed && validId && validDate && validWeight && validPhoto && validAnalysis;
+    }
+
+    function isValidChatMessage() {
+      let allowedFields = ['id', 'role', 'text', 'timestamp', 'isPlan'];
+      let hasRequired = hasRequiredFields(['id', 'role', 'text', 'timestamp']);
+      let hasOnlyAllowed = hasOnlyAllowedFields(allowedFields);
+
+      let validId = isValidString('id', 1, 100);
+      let validRole = request.resource.data.role in ['user', 'model'];
+      // A plan message carries a serialized JSON routine, so allow a large body
+      let validText = isValidString('text', 1, 20000);
+      let validTimestamp = request.resource.data.timestamp is number;
+      let validIsPlan = !('isPlan' in request.resource.data) || request.resource.data.isPlan is bool;
+
+      return hasRequired && hasOnlyAllowed && validId && validRole && validText && validTimestamp && validIsPlan;
     }
 
     // ===============================================================
@@ -146,6 +171,13 @@ service cloud.firestore {
         allow read: if isOwner(userId);
         allow create: if isOwner(userId) && isValidProgressEntry();
         allow update: if isOwner(userId) && isValidProgressEntry();
+        allow delete: if isOwner(userId);
+      }
+
+      match /chat/{messageId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidChatMessage();
+        allow update: if isOwner(userId) && isValidChatMessage();
         allow delete: if isOwner(userId);
       }
     }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Exercise, WorkoutSession } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { useToast } from './Toast';
@@ -20,6 +20,15 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({ routine, planName, onFini
   const [restTimer, setRestTimer] = useState(0);
   const [isResting, setIsResting] = useState(false);
   const [showInstruction, setShowInstruction] = useState(false);
+  // Preferred rest length, remembered across workouts
+  const [restDuration, setRestDuration] = useState<number>(() => {
+    const saved = parseInt(localStorage.getItem('fitflow_rest_duration') || '', 10);
+    return Number.isFinite(saved) && saved > 0 ? saved : 60;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('fitflow_rest_duration', String(restDuration));
+  }, [restDuration]);
 
   // Active Set Timer
   const [activeSetTimer, setActiveSetTimer] = useState(0);
@@ -45,9 +54,30 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({ routine, planName, onFini
     return match ? parseInt(match[0]) : 0;
   };
 
+  // Reuse a single AudioContext: browsers cap how many can exist, so creating
+  // one per beep silently breaks audio partway through a workout
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const getAudioCtx = (): AudioContext | null => {
+    if (!audioCtxRef.current) {
+      const Ctx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!Ctx) return null;
+      audioCtxRef.current = new Ctx();
+    }
+    // iOS suspends the context until a user gesture resumes it
+    if (audioCtxRef.current.state === 'suspended') {
+      void audioCtxRef.current.resume();
+    }
+    return audioCtxRef.current;
+  };
+
+  useEffect(() => {
+    return () => { void audioCtxRef.current?.close(); };
+  }, []);
+
   const playBeep = (frequency = 440, duration = 0.1, type = 'sine') => {
     try {
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const audioCtx = getAudioCtx();
+      if (!audioCtx) return;
       const oscillator = audioCtx.createOscillator();
       const gainNode = audioCtx.createGain();
       oscillator.type = type as OscillatorType;
@@ -102,9 +132,9 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({ routine, planName, onFini
     setCompletedSets(newCompletedSets);
     setIsActiveSetRunning(false);
 
-    // Start Rest Timer (default 60s)
+    // Start Rest Timer using the user's preferred rest length
     if (newCompletedSets[currentExerciseIndex] < currentExercise.sets) {
-        setRestTimer(60);
+        setRestTimer(restDuration);
         setIsResting(true);
     }
   };
@@ -324,7 +354,25 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({ routine, planName, onFini
                 className="absolute inset-x-4 top-1/4 bg-zinc-800/95 backdrop-blur-xl border border-primary/30 p-8 rounded-[2rem] text-center shadow-2xl z-10"
               >
                   <p className="text-zinc-400 font-medium mb-2 uppercase tracking-widest text-sm">休息一下</p>
-                  <div className="text-7xl font-display font-bold text-white mb-8 drop-shadow-[0_0_15px_rgba(255,255,255,0.1)]">{restTimer}</div>
+                  <div className="text-7xl font-display font-bold text-white mb-6 drop-shadow-[0_0_15px_rgba(255,255,255,0.1)]">{restTimer}</div>
+
+                  {/* Preset rest lengths — remembered for the next set */}
+                  <div className="flex gap-2 justify-center mb-6">
+                      {[30, 60, 90, 120].map(sec => (
+                          <button
+                              key={sec}
+                              onClick={() => { setRestDuration(sec); setRestTimer(sec); }}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
+                                restDuration === sec
+                                ? 'bg-primary/20 border-primary/50 text-primary'
+                                : 'bg-zinc-900/60 border-white/10 text-zinc-400 hover:text-white'
+                              }`}
+                          >
+                              {sec}s
+                          </button>
+                      ))}
+                  </div>
+
                   <div className="flex gap-4 justify-center">
                       <button onClick={() => setRestTimer(prev => prev + 10)} className="px-6 py-3 bg-zinc-700 rounded-2xl text-white font-bold hover:bg-zinc-600 transition-colors">+10s</button>
                       <button onClick={() => setIsResting(false)} className="px-6 py-3 bg-primary text-zinc-950 font-bold rounded-2xl hover:bg-lime-400 transition-colors shadow-lg shadow-primary/20">跳過</button>

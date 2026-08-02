@@ -6,11 +6,11 @@ import WorkoutLog from './components/WorkoutLog';
 import ProfileModal from './components/ProfileModal';
 import ActiveWorkout from './components/ActiveWorkout';
 import ProgressTracker from './components/ProgressTracker';
-import { AppView, UserProfile, WorkoutSession, Exercise, ProgressEntry } from './types';
+import { AppView, UserProfile, WorkoutSession, Exercise, ProgressEntry, ChatMessage } from './types';
 import { AnimatePresence, motion } from 'motion/react';
-import { auth, db, signInWithGoogle, logout, handleFirestoreError, OperationType } from './firebase';
+import { auth, db, signInWithGoogle, logout, logFirestoreError, OperationType } from './firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, setDoc, deleteDoc, collection, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, collection, onSnapshot, query, orderBy, getDocs, writeBatch } from 'firebase/firestore';
 import { useToast } from './components/Toast';
 
 const App: React.FC = () => {
@@ -21,6 +21,7 @@ const App: React.FC = () => {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [workoutHistory, setWorkoutHistory] = useState<WorkoutSession[]>([]);
   const [progressHistory, setProgressHistory] = useState<ProgressEntry[]>([]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   
   // Auth state
   const [user, setUser] = useState<User | null>(null);
@@ -70,6 +71,7 @@ const App: React.FC = () => {
       setUserProfile(null);
       setWorkoutHistory([]);
       setProgressHistory([]);
+      setChatMessages([]);
       return;
     }
 
@@ -82,26 +84,45 @@ const App: React.FC = () => {
       } else {
         setUserProfile(null);
       }
-    }, (error) => handleFirestoreError(error, OperationType.GET, `users/${userId}`));
+    }, (error) => {
+      showToast("無法讀取個人資料，請檢查網路連線。", 'error');
+      logFirestoreError(error, OperationType.GET, `users/${userId}`);
+    });
 
     // Listen to Workout History
     const workoutsQuery = query(collection(db, 'users', userId, 'workouts'), orderBy('date', 'desc'));
     const workoutsUnsubscribe = onSnapshot(workoutsQuery, (snapshot) => {
       const workouts = snapshot.docs.map(doc => doc.data() as WorkoutSession);
       setWorkoutHistory(workouts);
-    }, (error) => handleFirestoreError(error, OperationType.LIST, `users/${userId}/workouts`));
+    }, (error) => {
+      showToast("無法讀取訓練紀錄，請檢查網路連線。", 'error');
+      logFirestoreError(error, OperationType.LIST, `users/${userId}/workouts`);
+    });
 
     // Listen to Progress History
     const progressQuery = query(collection(db, 'users', userId, 'progress'), orderBy('date', 'desc'));
     const progressUnsubscribe = onSnapshot(progressQuery, (snapshot) => {
       const progress = snapshot.docs.map(doc => doc.data() as ProgressEntry);
       setProgressHistory(progress);
-    }, (error) => handleFirestoreError(error, OperationType.LIST, `users/${userId}/progress`));
+    }, (error) => {
+      showToast("無法讀取體態紀錄，請檢查網路連線。", 'error');
+      logFirestoreError(error, OperationType.LIST, `users/${userId}/progress`);
+    });
+
+    // Listen to Chat History (ascending so the conversation reads top to bottom)
+    const chatQuery = query(collection(db, 'users', userId, 'chat'), orderBy('timestamp', 'asc'));
+    const chatUnsubscribe = onSnapshot(chatQuery, (snapshot) => {
+      setChatMessages(snapshot.docs.map(doc => doc.data() as ChatMessage));
+    }, (error) => {
+      showToast("無法讀取對話紀錄，請檢查網路連線。", 'error');
+      logFirestoreError(error, OperationType.LIST, `users/${userId}/chat`);
+    });
 
     return () => {
       profileUnsubscribe();
       workoutsUnsubscribe();
       progressUnsubscribe();
+      chatUnsubscribe();
     };
   }, [user, isAuthReady]);
 
@@ -112,7 +133,8 @@ const App: React.FC = () => {
       await setDoc(doc(db, 'users', user.uid), profile);
       // Local state is updated via onSnapshot
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}`);
+      showToast("個人資料儲存失敗，請稍後再試。", 'error');
+      logFirestoreError(error, OperationType.WRITE, `users/${user.uid}`);
     }
   };
 
@@ -130,7 +152,7 @@ const App: React.FC = () => {
       showToast("🎉 訓練已成功記錄！", 'success');
     } catch (error) {
       showToast("儲存失敗，請檢查網路連線。", 'error');
-      handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}/workouts/${session.id}`);
+      logFirestoreError(error, OperationType.WRITE, `users/${user.uid}/workouts/${session.id}`);
     }
   };
 
@@ -144,7 +166,7 @@ const App: React.FC = () => {
       showToast("已刪除訓練紀錄", 'info');
     } catch (error) {
       showToast("刪除失敗，請稍後再試。", 'error');
-      handleFirestoreError(error, OperationType.DELETE, `users/${user.uid}/workouts/${id}`);
+      logFirestoreError(error, OperationType.DELETE, `users/${user.uid}/workouts/${id}`);
     }
   };
 
@@ -158,7 +180,7 @@ const App: React.FC = () => {
       showToast("已刪除體態紀錄", 'info');
     } catch (error) {
       showToast("刪除失敗，請稍後再試。", 'error');
-      handleFirestoreError(error, OperationType.DELETE, `users/${user.uid}/progress/${id}`);
+      logFirestoreError(error, OperationType.DELETE, `users/${user.uid}/progress/${id}`);
     }
   };
 
@@ -173,8 +195,57 @@ const App: React.FC = () => {
         const updatedProfile = { ...userProfile, weight: entry.weight };
         await handleSaveProfile(updatedProfile);
       }
+      showToast("體態紀錄已儲存", 'success');
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}/progress/${entry.id}`);
+      showToast("儲存失敗，請檢查網路連線。", 'error');
+      logFirestoreError(error, OperationType.WRITE, `users/${user.uid}/progress/${entry.id}`);
+    }
+  };
+
+  // Persist chat messages so the conversation survives reloads and follows the
+  // user across devices
+  const handleSaveChatMessages = async (messages: ChatMessage[]) => {
+    if (!user || messages.length === 0) return;
+    try {
+      const batch = writeBatch(db);
+      for (const msg of messages) {
+        batch.set(doc(db, 'users', user.uid, 'chat', msg.id), msg);
+      }
+      await batch.commit();
+    } catch (error) {
+      showToast("對話儲存失敗，訊息可能不會被保留。", 'error');
+      logFirestoreError(error, OperationType.WRITE, `users/${user.uid}/chat`);
+    }
+  };
+
+  const handleUpdateChatMessage = async (id: string, text: string) => {
+    if (!user) return;
+    const existing = chatMessages.find(m => m.id === id);
+    if (!existing) return;
+    try {
+      await setDoc(doc(db, 'users', user.uid, 'chat', id), { ...existing, text });
+    } catch (error) {
+      showToast("更新失敗，請稍後再試。", 'error');
+      logFirestoreError(error, OperationType.WRITE, `users/${user.uid}/chat/${id}`);
+    }
+  };
+
+  const handleClearChat = async () => {
+    if (!user) return;
+    if (!await confirm("確定要清除所有對話紀錄嗎？此動作無法復原。")) return;
+    try {
+      const snapshot = await getDocs(collection(db, 'users', user.uid, 'chat'));
+      // Firestore caps a batch at 500 writes, so delete in chunks
+      const docs = snapshot.docs;
+      for (let i = 0; i < docs.length; i += 400) {
+        const batch = writeBatch(db);
+        docs.slice(i, i + 400).forEach(d => batch.delete(d.ref));
+        await batch.commit();
+      }
+      showToast("已清除對話紀錄", 'info');
+    } catch (error) {
+      showToast("清除失敗，請稍後再試。", 'error');
+      logFirestoreError(error, OperationType.DELETE, `users/${user.uid}/chat`);
     }
   };
 
@@ -187,7 +258,8 @@ const App: React.FC = () => {
   const handleReset = async () => {
       if(await confirm("確定要登出嗎？")) {
         await logout();
-        // 清除本機暫存，避免下一位登入者看到上一位的聊天與訓練狀態
+        // 清除本機暫存，避免下一位登入者看到上一位的訓練狀態
+        // （聊天紀錄現在存在 Firestore，會隨帳號自動切換）
         localStorage.removeItem('fitflow_chat_messages');
         localStorage.removeItem('fitflow_active_routine');
         localStorage.removeItem('fitflow_active_plan_name');
@@ -292,6 +364,10 @@ const App: React.FC = () => {
                   onUpdateProfile={handleSaveProfile} 
                   onStartWorkout={startActiveWorkout}
                   onLogWorkout={handleSaveWorkout}
+                  messages={chatMessages}
+                  onSaveMessages={handleSaveChatMessages}
+                  onUpdateMessage={handleUpdateChatMessage}
+                  onClearChat={handleClearChat}
                 />
               </motion.div>
             )}
@@ -321,6 +397,7 @@ const App: React.FC = () => {
                   history={progressHistory}
                   onSaveEntry={handleSaveProgress}
                   onDelete={handleDeleteProgress}
+                  workoutHistory={workoutHistory}
                 />
               </motion.div>
             )}

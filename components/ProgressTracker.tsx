@@ -1,17 +1,23 @@
 import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { UserProfile, ProgressEntry } from '../types';
+import { UserProfile, ProgressEntry, WorkoutSession } from '../types';
 import { analyzePhysique } from '../services/geminiService';
 import ReactMarkdown from 'react-markdown';
 import { useToast } from './Toast';
+import StrengthProgress from './StrengthProgress';
 
 interface ProgressTrackerProps {
   profile: UserProfile;
   history: ProgressEntry[];
   onSaveEntry: (entry: ProgressEntry) => void;
   onDelete?: (id: string) => void;
+  workoutHistory?: WorkoutSession[];
 }
+
+// Firestore caps a document at 1 MiB, so the base64 photo must stay well under
+// that once the entry's other fields (incl. the AI analysis) are accounted for
+const MAX_PHOTO_CHARS = 700_000;
 
 const compressImage = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -42,7 +48,20 @@ const compressImage = (file: File): Promise<string> => {
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', 0.7));
+
+        // Step the quality down until the encoded photo fits the document budget
+        let quality = 0.7;
+        let dataUrl = canvas.toDataURL('image/jpeg', quality);
+        while (dataUrl.length > MAX_PHOTO_CHARS && quality > 0.3) {
+          quality -= 0.1;
+          dataUrl = canvas.toDataURL('image/jpeg', quality);
+        }
+
+        if (dataUrl.length > MAX_PHOTO_CHARS) {
+          reject(new Error('PHOTO_TOO_LARGE'));
+          return;
+        }
+        resolve(dataUrl);
       };
       img.onerror = (error) => reject(error);
     };
@@ -50,8 +69,9 @@ const compressImage = (file: File): Promise<string> => {
   });
 };
 
-const ProgressTracker: React.FC<ProgressTrackerProps> = ({ profile, history, onSaveEntry, onDelete }) => {
+const ProgressTracker: React.FC<ProgressTrackerProps> = ({ profile, history, onSaveEntry, onDelete, workoutHistory = [] }) => {
   const { showToast } = useToast();
+  const [tab, setTab] = useState<'body' | 'strength'>('body');
   const [isAdding, setIsAdding] = useState(false);
   const [weight, setWeight] = useState<number>(profile.weight);
   const [photo, setPhoto] = useState<string | null>(null);
@@ -75,7 +95,12 @@ const ProgressTracker: React.FC<ProgressTrackerProps> = ({ profile, history, onS
       setPhoto(compressedBase64);
     } catch (error) {
       console.error("Error compressing image:", error);
-      showToast("圖片處理失敗，請換一張試試。", 'error');
+      showToast(
+        error instanceof Error && error.message === 'PHOTO_TOO_LARGE'
+          ? "這張照片太大了，請換一張解析度較低的照片。"
+          : "圖片處理失敗，請換一張試試。",
+        'error'
+      );
     }
   };
 
@@ -112,15 +137,38 @@ const ProgressTracker: React.FC<ProgressTrackerProps> = ({ profile, history, onS
   return (
     <div className="space-y-6 pb-24">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-display font-bold tracking-tight">體態追蹤</h2>
-        <button 
-          onClick={() => setIsAdding(true)}
-          className="bg-primary text-zinc-900 px-4 py-2 rounded-full font-medium text-sm shadow-lg shadow-primary/20 hover:bg-primary/90 transition-colors"
-        >
-          + 新增紀錄
-        </button>
+        <h2 className="text-2xl font-display font-bold tracking-tight">進度追蹤</h2>
+        {tab === 'body' && (
+          <button
+            onClick={() => setIsAdding(true)}
+            className="bg-primary text-zinc-900 px-4 py-2 rounded-full font-medium text-sm shadow-lg shadow-primary/20 hover:bg-primary/90 transition-colors"
+          >
+            + 新增紀錄
+          </button>
+        )}
       </div>
 
+      {/* Tabs */}
+      <div className="flex gap-2">
+        {([['body', '體態'], ['strength', '力量']] as const).map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            className={`flex-1 py-2.5 text-sm font-medium rounded-2xl transition-all border ${
+              tab === key
+                ? 'bg-primary border-primary text-zinc-950 shadow-lg shadow-primary/20'
+                : 'bg-surface/50 border-white/10 text-zinc-400 hover:text-white'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'strength' ? (
+        <StrengthProgress history={workoutHistory} />
+      ) : (
+      <>
       {/* Weight Chart */}
       {chartData.length > 0 && (
         <div className="bg-surface p-5 rounded-3xl border border-white/5 shadow-xl">
@@ -177,6 +225,9 @@ const ProgressTracker: React.FC<ProgressTrackerProps> = ({ profile, history, onS
           </div>
         )}
       </div>
+
+      </>
+      )}
 
       {/* Add Entry Modal */}
       <AnimatePresence>

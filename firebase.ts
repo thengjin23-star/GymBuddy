@@ -53,6 +53,38 @@ export interface FirestoreErrorInfo {
   }
 }
 
+/**
+ * Logs a Firestore failure without throwing.
+ *
+ * Use this wherever the caller already surfaces the failure to the user (a
+ * toast, a retry banner). `handleFirestoreError` rethrows, which escapes catch
+ * blocks and onSnapshot error callbacks as an unhandled rejection.
+ */
+export function logFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  console.error('Firestore Error: ', JSON.stringify(buildFirestoreErrorInfo(error, operationType, path)));
+}
+
+function buildFirestoreErrorInfo(error: unknown, operationType: OperationType, path: string | null): FirestoreErrorInfo {
+  return {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData.map(provider => ({
+        providerId: provider.providerId,
+        displayName: provider.displayName,
+        email: provider.email,
+        photoUrl: provider.photoURL
+      })) || []
+    },
+    operationType,
+    path
+  };
+}
+
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),

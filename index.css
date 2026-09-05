@@ -11,8 +11,28 @@
   scrollbar-width: none;
 }
 
+html {
+  background: #09090b;
+  scroll-behavior: smooth;
+}
+
 body {
-  background-color: #09090b;
+  min-width: 320px;
+  background:
+    radial-gradient(circle at 50% -20%, rgba(163, 230, 53, 0.10), transparent 34rem),
+    #09090b;
   color: #f8fafc;
   -webkit-tap-highlight-color: transparent;
+}
+
+button, input, textarea, select {
+  font: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid #a3e635;
+  outline-offset: 3px;
 }

@@ -1,17 +1,39 @@
-import React, { useState, useEffect } from 'react';
+import React, { lazy, Suspense, useState, useEffect } from 'react';
 import Navigation from './components/Navigation';
 import Dashboard from './components/Dashboard';
-import AITrainer from './components/AITrainer';
-import WorkoutLog from './components/WorkoutLog';
-import ProfileModal from './components/ProfileModal';
-import ActiveWorkout from './components/ActiveWorkout';
-import ProgressTracker from './components/ProgressTracker';
 import { AppView, UserProfile, WorkoutSession, Exercise, ProgressEntry, ChatMessage } from './types';
 import { AnimatePresence, motion } from 'motion/react';
 import { auth, db, signInWithGoogle, logout, logFirestoreError, OperationType } from './firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, setDoc, deleteDoc, collection, onSnapshot, query, orderBy, getDocs, writeBatch } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, collection, onSnapshot, query, orderBy, limitToLast, getDocs, writeBatch } from 'firebase/firestore';
 import { useToast } from './components/Toast';
+
+// These views pull in the Gemini SDK, Markdown renderer, or extra UI code.
+// Loading them only after a user opens the related view keeps the dashboard
+// responsive on slower mobile connections.
+const AITrainer = lazy(() => import('./components/AITrainer'));
+const WorkoutLog = lazy(() => import('./components/WorkoutLog'));
+const ProfileModal = lazy(() => import('./components/ProfileModal'));
+const ActiveWorkout = lazy(() => import('./components/ActiveWorkout'));
+const ProgressTracker = lazy(() => import('./components/ProgressTracker'));
+
+const readStoredRoutine = (): Exercise[] | null => {
+  try {
+    const stored = localStorage.getItem('fitflow_active_routine');
+    const routine: unknown = stored ? JSON.parse(stored) : null;
+    return Array.isArray(routine) ? routine as Exercise[] : null;
+  } catch {
+    // A partial/corrupt localStorage write should not prevent the app from loading.
+    localStorage.removeItem('fitflow_active_routine');
+    return null;
+  }
+};
+
+const LoadingView = () => (
+  <div className="min-h-[12rem] flex items-center justify-center" role="status" aria-label="載入中">
+    <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary" />
+  </div>
+);
 
 const App: React.FC = () => {
   const { showToast, confirm } = useToast();
@@ -31,10 +53,7 @@ const App: React.FC = () => {
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   
   // State for Active Workout
-  const [activeRoutine, setActiveRoutine] = useState<Exercise[] | null>(() => {
-    const saved = localStorage.getItem('fitflow_active_routine');
-    return saved ? JSON.parse(saved) : null;
-  });
+  const [activeRoutine, setActiveRoutine] = useState<Exercise[] | null>(readStoredRoutine);
   const [activePlanName, setActivePlanName] = useState<string>(() => {
     return localStorage.getItem('fitflow_active_plan_name') || "";
   });
@@ -110,7 +129,13 @@ const App: React.FC = () => {
     });
 
     // Listen to Chat History (ascending so the conversation reads top to bottom)
-    const chatQuery = query(collection(db, 'users', userId, 'chat'), orderBy('timestamp', 'asc'));
+    // Chat history can grow indefinitely. Keep the latest 100 messages in the
+    // live listener so opening the app remains fast and predictable.
+    const chatQuery = query(
+      collection(db, 'users', userId, 'chat'),
+      orderBy('timestamp', 'asc'),
+      limitToLast(100),
+    );
     const chatUnsubscribe = onSnapshot(chatQuery, (snapshot) => {
       setChatMessages(snapshot.docs.map(doc => doc.data() as ChatMessage));
     }, (error) => {
@@ -311,18 +336,20 @@ const App: React.FC = () => {
   }
 
   if (!userProfile) {
-    return <ProfileModal onSave={handleSaveProfile} />;
+    return <Suspense fallback={<LoadingView />}><ProfileModal onSave={handleSaveProfile} /></Suspense>;
   }
 
   // Render Full Screen Active Workout if active
   if (currentView === AppView.ACTIVE_WORKOUT && activeRoutine) {
       return (
+        <Suspense fallback={<LoadingView />}>
           <ActiveWorkout
             routine={activeRoutine}
             planName={activePlanName}
             onFinish={(session) => handleSaveWorkout(session, { fromActiveWorkout: true })}
             onCancel={() => setCurrentView(AppView.DASHBOARD)}
           />
+        </Suspense>
       );
   }
 
@@ -330,6 +357,7 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-background font-sans text-zinc-50 selection:bg-primary selection:text-zinc-950">
       <main className="max-w-md mx-auto min-h-screen relative bg-background shadow-2xl overflow-hidden flex flex-col">
         <div className="p-4 pt-6 flex-1 overflow-y-auto no-scrollbar relative">
+          <Suspense fallback={<LoadingView />}>
           <AnimatePresence mode="wait">
             {currentView === AppView.DASHBOARD && (
               <motion.div
@@ -469,6 +497,7 @@ const App: React.FC = () => {
               </motion.div>
             )}
           </AnimatePresence>
+          </Suspense>
         </div>
 
         <Navigation currentView={currentView} setView={setCurrentView} />

@@ -62,6 +62,15 @@ const Dashboard: React.FC<DashboardProps> = ({ profile, history, onStartWorkout,
 
   const totalWorkouts = history.length;
   const totalMinutes = history.reduce((acc, curr) => acc + curr.durationMinutes, 0);
+  const now = new Date();
+  const sevenDaysAgo = new Date(now);
+  sevenDaysAgo.setHours(0, 0, 0, 0);
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+  const weeklyWorkouts = history.filter((session) => new Date(session.date) >= sevenDaysAgo);
+  const weeklyMinutes = weeklyWorkouts.reduce((total, session) => total + session.durationMinutes, 0);
+  const weeklyGoal = 3;
+  const weeklyProgress = Math.min((weeklyWorkouts.length / weeklyGoal) * 100, 100);
+  const dateLabel = now.toLocaleDateString('zh-TW', { month: 'long', day: 'numeric', weekday: 'long' });
 
   // Calculate Streak
   const calculateStreak = () => {
@@ -116,25 +125,29 @@ const Dashboard: React.FC<DashboardProps> = ({ profile, history, onStartWorkout,
   return (
     <div className="flex flex-col gap-6 pb-24">
       {/* Header */}
-      <header className="flex justify-between items-center mb-2">
+      <header className="flex justify-between items-start mb-1">
         <div>
+          <p className="text-primary text-xs font-bold tracking-[0.16em] uppercase mb-2">{dateLabel}</p>
           <h1 className="text-3xl font-display font-bold text-white tracking-tight">你好，{profile.name}</h1>
-          <p className="text-zinc-400 text-sm mt-1">{dailyQuote}</p>
+          <p className="text-zinc-400 text-sm mt-1.5 max-w-[17rem] leading-relaxed">{dailyQuote}</p>
         </div>
-        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-emerald-400 flex items-center justify-center text-zinc-900 font-display font-bold text-xl uppercase shadow-lg shadow-primary/20">
-          {profile.name.charAt(0)}
+        <div className="relative shrink-0">
+          <div className="absolute inset-0 rounded-2xl bg-primary/30 blur-xl" />
+          <div className="relative w-12 h-12 rounded-2xl bg-gradient-to-br from-primary to-emerald-400 flex items-center justify-center text-zinc-900 font-display font-bold text-xl uppercase shadow-lg shadow-primary/20">
+            {profile.name.charAt(0)}
+          </div>
         </div>
       </header>
 
       {/* TODAY'S ACTION CARD (Hero Section) */}
-      <div className="bg-gradient-to-br from-zinc-800/80 to-zinc-900/80 border border-white/10 p-6 rounded-[2rem] relative overflow-hidden shadow-2xl backdrop-blur-md">
-        <div className="absolute top-0 right-0 w-32 h-32 bg-primary/20 rounded-full -mr-10 -mt-10 blur-3xl"></div>
-        <div className="absolute bottom-0 left-0 w-24 h-24 bg-emerald-500/10 rounded-full -ml-8 -mb-8 blur-2xl"></div>
+      <div className="bg-gradient-to-br from-zinc-800/90 via-zinc-900/90 to-zinc-950 border border-white/10 p-6 rounded-[2rem] relative overflow-hidden shadow-2xl shadow-black/30 backdrop-blur-md">
+        <div className="absolute top-0 right-0 w-40 h-40 bg-primary/20 rounded-full -mr-12 -mt-12 blur-3xl"></div>
+        <div className="absolute bottom-0 left-0 w-28 h-28 bg-emerald-500/10 rounded-full -ml-10 -mb-10 blur-2xl"></div>
         
         <div className="relative z-10">
-          <div className="flex justify-between items-start mb-6">
+          <div className="flex justify-between items-start mb-5">
             <div>
-              <p className="text-primary font-semibold text-xs tracking-wider uppercase mb-2">今日計畫 • {dayMap[todayName] || todayName}</p>
+              <p className="text-primary font-semibold text-xs tracking-[0.14em] uppercase mb-2">今日計畫 • {dayMap[todayName] || todayName}</p>
               <h2 className="text-3xl font-display font-bold text-white leading-tight">
                 {todaysPlan ? (todaysPlan.isRest ? '休息日 😴' : todaysPlan.focus) : '尚未安排計畫'}
               </h2>
@@ -164,6 +177,20 @@ const Dashboard: React.FC<DashboardProps> = ({ profile, history, onStartWorkout,
               {todaysPlan?.isRest ? '好好休息，肌肉是在休息時生長的！' : '去「AI 教練」頁面產生一份專屬的週課表吧！'}
             </div>
           )}
+
+          <div className="mt-6 pt-5 border-t border-white/10 flex items-center gap-4">
+            <div className="relative w-11 h-11 shrink-0" role="img" aria-label={`本週完成 ${weeklyWorkouts.length} 次訓練，目標 ${weeklyGoal} 次`}>
+              <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
+                <path d="M18 2.5a15.5 15.5 0 1 1 0 31a15.5 15.5 0 1 1 0-31" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="3" />
+                <path d="M18 2.5a15.5 15.5 0 1 1 0 31a15.5 15.5 0 1 1 0-31" fill="none" stroke="#a3e635" strokeWidth="3" strokeLinecap="round" strokeDasharray={`${weeklyProgress} 100`} />
+              </svg>
+              <span className="absolute inset-0 flex items-center justify-center text-[11px] font-bold text-primary">{weeklyWorkouts.length}/{weeklyGoal}</span>
+            </div>
+            <div>
+              <p className="text-white font-semibold text-sm">本週節奏</p>
+              <p className="text-zinc-400 text-xs mt-0.5">已完成 {weeklyWorkouts.length} 次訓練・累積 {weeklyMinutes} 分鐘</p>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -279,25 +306,21 @@ const Dashboard: React.FC<DashboardProps> = ({ profile, history, onStartWorkout,
 
       {/* Stats Row */}
       <div className="grid grid-cols-3 gap-3 mt-2">
-        <div className="bg-surface/60 p-4 rounded-3xl border border-white/5 backdrop-blur-sm flex flex-col items-center justify-center text-center">
+        <div className="bg-surface/70 p-4 rounded-3xl border border-white/5 backdrop-blur-sm flex flex-col items-center justify-center text-center shadow-lg shadow-black/10">
           <p className="text-zinc-400 text-[11px] font-medium mb-1">連續打卡</p>
           <div className="flex items-baseline gap-1">
              <p className="text-2xl font-display font-bold text-orange-400 drop-shadow-[0_0_12px_rgba(251,146,60,0.3)]">{currentStreak}</p>
              <span className="text-xs text-zinc-500 font-medium">天</span>
           </div>
         </div>
-        <div className="bg-surface/60 p-4 rounded-3xl border border-white/5 backdrop-blur-sm flex flex-col items-center justify-center text-center">
+        <div className="bg-surface/70 p-4 rounded-3xl border border-white/5 backdrop-blur-sm flex flex-col items-center justify-center text-center shadow-lg shadow-black/10">
           <p className="text-zinc-400 text-[11px] font-medium mb-1">本週訓練</p>
           <div className="flex items-baseline gap-1">
-             <p className="text-2xl font-display font-bold text-white">{history.filter(h => {
-                const d = new Date(h.date);
-                const now = new Date();
-                return d > new Date(now.setDate(now.getDate() - 7));
-             }).length}</p>
+             <p className="text-2xl font-display font-bold text-white">{weeklyWorkouts.length}</p>
              <span className="text-xs text-zinc-500 font-medium">次</span>
           </div>
         </div>
-        <div className="bg-surface/60 p-4 rounded-3xl border border-white/5 backdrop-blur-sm flex flex-col items-center justify-center text-center">
+        <div className="bg-surface/70 p-4 rounded-3xl border border-white/5 backdrop-blur-sm flex flex-col items-center justify-center text-center shadow-lg shadow-black/10">
            <p className="text-zinc-400 text-[11px] font-medium mb-1">總分鐘數</p>
            <div className="flex items-baseline gap-1">
              <p className="text-2xl font-display font-bold text-primary drop-shadow-[0_0_12px_rgba(163,230,53,0.2)]">{totalMinutes}</p>
